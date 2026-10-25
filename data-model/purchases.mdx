@@ -1,5 +1,5 @@
 ---
-title: "Purchase Order Tables: Proveedor, Compra, and Compra_Producto"
+title: "Purchase Tables: Proveedor, Compra, Compra_Producto"
 sidebarTitle: "Purchases"
 description: "Reference for the 3 purchase tables in Mundo Escolar — supplier records, purchase order headers, and itemized purchase detail lines."
 ---
@@ -158,13 +158,13 @@ ORDER BY c.Fecha_Compra DESC;
 
 ## Foreign-Key Relationships
 
-```
+```text
 Proveedor ──────────── Compra ──────────── Compra_Producto
                           │                       │
 Usuario ──────────────────┘               Producto ───────┘
 ```
 
-- `Compra.Id_Proveedor` → `Proveedor.Id_Proveedor)`
+- `Compra.Id_Proveedor` → `Proveedor.Id_Proveedor`
 - `Compra.Id_Usuario` → `Usuario.Id_Usuario`
 - `Compra_Producto.Id_Compra` → `Compra.Id_Compra`
 - `Compra_Producto.Id_Producto` → `Producto.Id_Producto`

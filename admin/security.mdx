@@ -121,12 +121,11 @@ When stored procedures own their data access (ownership chaining), SQL Server do
 
 ## Denying Dangerous Operations
 
-Explicitly deny permissions that must never be used by application roles, regardless of inherited rights:
+Explicitly deny permissions that must never be used by application roles, regardless of inherited rights. In SQL Server, `DROP` is a DDL statement governed by `ALTER` permission on the containing schema — denying `ALTER` on the schema also prevents application roles from dropping or recreating objects within it:
 
 ```sql
--- Prevent application roles from dropping or altering tables
-DENY ALTER  ON SCHEMA::dbo TO rol_vendedor;
-DENY DROP   ON SCHEMA::dbo TO rol_vendedor;
-DENY CONTROL ON DATABASE::MUNDO_ESCOLAR TO rol_vendedor;
+-- Prevent application roles from altering or controlling schema objects
+DENY ALTER   ON SCHEMA::dbo              TO rol_vendedor;
+DENY CONTROL ON DATABASE::MUNDO_ESCOLAR  TO rol_vendedor;
 GO
 ```

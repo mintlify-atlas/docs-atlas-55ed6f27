@@ -1,5 +1,5 @@
 ---
-title: "Reporting Queries for Mundo Escolar"
+title: "SQL Reporting Queries for Mundo Escolar — All Domains"
 sidebarTitle: "Reports"
 description: "Ready-to-run SQL reporting queries for sales summaries, inventory status, billing aging, and purchase history — all targeting the Mundo Escolar schema."
 ---
@@ -74,8 +74,8 @@ Combines product and service revenue per sale to give a complete picture of what
 SELECT
     v.Id_Venta,
     v.Fecha,
-    ISNULL(SUM(DISTINCT TRY_CAST(vp.Subtotal AS DECIMAL(12,2))), 0) AS Subtotal_Productos,
-    ISNULL(SUM(DISTINCT vs.Subtotal), 0)                            AS Subtotal_Servicios,
+    ISNULL(SUM(TRY_CAST(vp.Subtotal AS DECIMAL(12,2))), 0) AS Subtotal_Productos,
+    ISNULL(SUM(vs.Subtotal), 0)                            AS Subtotal_Servicios,
     v.Monto_Total
 FROM Venta v
 LEFT JOIN Venta_Producto vp ON v.Id_Venta = vp.Id_Venta
@@ -167,7 +167,6 @@ SELECT
     f.Saldo_Pendiente,
     DATEDIFF(DAY, f.Fecha_Vencimiento, GETDATE()) AS Dias_Vencido
 FROM Factura f
-INNER JOIN Estado_Factura ef ON f.Id_Estado_Factura = ef.Id_Estado_Factura
 WHERE f.Saldo_Pendiente > 0
   AND f.Fecha_Vencimiento < GETDATE()
 ORDER BY Dias_Vencido DESC;

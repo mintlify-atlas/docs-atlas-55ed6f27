@@ -22,7 +22,7 @@ The database contains **24 tables** organized across **5 business domains**. Eve
     Stores customer profiles with client types, payment conditions, and institutional affiliations — supporting both individual and organizational buyers.
   </Card>
   <Card title="Inventory" icon="boxes-stacked" href="/data-model/inventory">
-    Tracks product categories, product catalog with reorder points, services offered, and a full inventory-movement log with debit/credit movement types.
+    Tracks product categories, the product catalog with reorder points, movement types (debit/credit), and a full inventory-movement log that records every stock change.
   </Card>
   <Card title="Purchases" icon="truck" href="/data-model/purchases">
     Records supplier information and normalized purchase orders (header + line-item detail) that automatically feed stock levels through inventory movements.
@@ -57,15 +57,15 @@ This type is used throughout the schema on every `Estado` (status) column and ot
 
 The project SQL layer is split into seven focused files, each handling a distinct phase of the database lifecycle:
 
-| File | Purpose |
-|---|---|
-| `Estructura.sql` | Creates the database, configures data/log files, defines all 24 tables, foreign keys, and unique constraints |
-| `Inserciones.sql` | Populates all reference and transactional tables with seed and sample data |
-| `Procedimientos_Almacenados.sql` | Defines stored procedures for the main business operations (CRUD, lookups, business logic) |
-| `Triggers.sql` | Implements database triggers for automatic inventory updates, audit logging, and data integrity enforcement |
-| `Reportes.sql` | Contains pre-built reporting queries for sales summaries, inventory status, and billing reconciliation |
-| `Seguridad.sql` | Configures SQL Server logins, database users, and role-based permission grants |
-| `Mantenimiento_Backups.sql` | Defines backup strategies, maintenance plans, and index rebuild/reorganize jobs |
+| File | Status | Purpose |
+|---|---|---|
+| `Estructura.sql` | ✅ Implemented | Creates the database, configures data/log files, defines all 24 tables, foreign keys, and unique constraints |
+| `Inserciones.sql` | 🚧 Stub | Reserved for seed and sample data inserts — not yet implemented |
+| `Procedimientos_Almacenados.sql` | 🚧 Stub | Reserved for stored procedures — not yet implemented |
+| `Triggers.sql` | 🚧 Stub | Reserved for database triggers — not yet implemented |
+| `Reportes.sql` | 🚧 Stub | Reserved for reporting queries — not yet implemented |
+| `Seguridad.sql` | 🚧 Stub | Reserved for login, user, and permission configuration — not yet implemented |
+| `Mantenimiento_Backups.sql` | 🚧 Stub | Reserved for backup and maintenance plans — not yet implemented |
 
 ## Database Sizing
 

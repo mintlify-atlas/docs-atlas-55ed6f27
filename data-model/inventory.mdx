@@ -1,7 +1,7 @@
 ---
-title: "Inventory Management: Categoria, Producto, and Movement Tables"
+title: "Inventory Tables: Categoria, Producto, and Movements"
 sidebarTitle: "Inventory"
-description: "Reference for the 4 inventory tables in Mundo Escolar — product categories, product records with reorder points, movement types, and inventory movement logs."
+description: "Reference for the 4 inventory tables in Mundo Escolar — product categories, products with reorder points, movement types, and inventory movement logs."
 ---
 
 The Inventory domain governs how Mundo Escolar organizes its merchandise and tracks stock levels over time. Products are organized under named categories, and every stock change — whether from a purchase, a sale, a manual adjustment, or a write-off — is recorded as a `Movimiento_Inventario` row that links back to a `Tipo_Movimiento` entry. This event-sourcing approach means a full audit trail of stock changes is always available, independent of the current `Stock_Actual` value stored on the `Producto` row.
@@ -205,7 +205,7 @@ ORDER BY CAST(p.Stock_Actual AS INT) ASC;
 
 ## Foreign-Key Relationships
 
-```
+```text
 Categoria ──────────── Producto ──────────── Movimiento_Inventario
                                                       │
 Tipo_Movimiento ──────────────────────────────────────┤
@@ -215,5 +215,5 @@ Usuario ────────────────────────
 
 - `Producto.Id_Categoria` → `Categoria.Id_Categoria`
 - `Movimiento_Inventario.Id_Producto` → `Producto.Id_Producto`
-- `Movimiento_Inventario.Id_Tipo_Movimiento` → `Tipo_Movimiento.Id_Tipo_Movimiento)`
+- `Movimiento_Inventario.Id_Tipo_Movimiento` → `Tipo_Movimiento.Id_Tipo_Movimiento`
 - `Movimiento_Inventario.Id_Usuario` → `Usuario.Id_Usuario`

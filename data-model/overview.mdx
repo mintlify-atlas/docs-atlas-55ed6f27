@@ -1,5 +1,5 @@
 ---
-title: "Mundo Escolar Database Schema: 24-Table Overview"
+title: "Mundo Escolar: Complete 24-Table Database Overview"
 sidebarTitle: "Overview"
 description: "High-level map of all 24 tables in the Mundo Escolar database, organized by domain with key relationships and foreign-key constraints."
 ---
@@ -42,7 +42,7 @@ The MUNDO\_ESCOLAR schema applies a consistent set of conventions across all 24 
 - **`BOOL` alias type** — A custom type alias defined as `CREATE TYPE BOOL FROM BIT`. Used for all boolean status flags (e.g., `Estado`) throughout the schema, providing semantic clarity that matches the original MER diagram.
 - **`IDENTITY(1,1)` primary keys** — Every table uses a surrogate integer primary key with auto-increment seeded at 1 and incrementing by 1. No natural keys are used as primary keys.
 - **`VARCHAR` with explicit lengths** — All character columns declare an explicit maximum length (e.g., `VARCHAR(50)`, `VARCHAR(100)`, `VARCHAR(255)`) to enforce data boundaries at the database engine level.
-- **`DECIMAL(12,2)` for monetary values** — All currency columns (`Precio_Venta`, `Monto_Total`, `Saldo_Pendiente`, `Costo_Unitario`, `Subtotal`, etc.) use `DECIMAL(12,2)`, supporting values up to 999,999,999,999.99 with two decimal places of precision.
+- **`DECIMAL(12,2)` for monetary values** — Most currency columns (`Precio_Venta`, `Monto_Total`, `Saldo_Pendiente`, `Costo_Unitario`, `Compra_Producto.Subtotal`, etc.) use `DECIMAL(12,2)`, supporting values up to 999,999,999,999.99 with two decimal places of precision. **Exception:** `Venta_Producto.Cantidad` and `Venta_Producto.Subtotal` are both defined as `VARCHAR(50)` in the schema — an anomaly that requires `CAST` or `CONVERT` for any numeric operation. Similarly, `Producto.Stock_Actual` is `VARCHAR(50)` rather than a numeric type. See the [Inventory](./inventory) and [Sales](./sales) pages for query guidance.
 - **`DATETIME` for timestamps** — All date/time columns use the `DATETIME` type, including `Fecha_Registro`, `Fecha_Compra`, `Fecha_Emision`, `Fecha_Vencimiento`, and `Fecha_Hora` in the audit log.
 
 ## Constraints

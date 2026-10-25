@@ -1,7 +1,7 @@
 ---
 title: "Mundo Escolar: SQL Server Database for School Bookstores"
 sidebarTitle: "Home"
-description: "Complete SQL Server 2022 database system for Librería y Papelería Mundo Escolar — normalized schema for inventory, sales, purchases, billing, and role-based security."
+description: "SQL Server 2022 database for school bookstores — 24-table normalized schema covering inventory, sales, billing, purchases, and role-based security."
 ---
 
 Mundo Escolar is a production-ready SQL Server 2022 relational database designed for school bookstores and stationery shops. It provides a fully normalized schema covering every core business operation — from managing product inventory and supplier purchases to processing customer sales, generating invoices, and recording payments — all backed by role-based access control and a complete audit trail.
@@ -54,11 +54,11 @@ The repository is organized into seven SQL script files that you run in sequence
 |---|---|
 | `Estructura.sql` | Creates the database, all tables, foreign keys, and unique constraints |
 | `Inserciones.sql` | Seed data for lookup tables and initial records |
-| `Procedimientos_Almacenados.sql` | Business logic stored procedures |
-| `Triggers.sql` | Automatic triggers for audit logging and business rules |
-| `Reportes.sql` | Reporting queries for sales, inventory, and billing |
-| `Seguridad.sql` | SQL Server logins, users, roles, and permission grants |
-| `Mantenimiento_Backups.sql` | Backup jobs and database maintenance plans |
+| `Procedimientos_Almacenados.sql` | Placeholder for stored procedures — not yet implemented |
+| `Triggers.sql` | Placeholder for triggers — not yet implemented |
+| `Reportes.sql` | Placeholder for reporting queries — not yet implemented |
+| `Seguridad.sql` | Placeholder for SQL Server logins and role grants — not yet implemented |
+| `Mantenimiento_Backups.sql` | Placeholder for backup and maintenance jobs — not yet implemented |
 
 <Steps>
   <Step title="Set up SQL Server 2022">
@@ -70,7 +70,7 @@ The repository is organized into seven SQL script files that you run in sequence
   <Step title="Seed the database">
     Run `Inserciones.sql` to populate lookup tables with initial reference data.
   </Step>
-  <Step title="Apply business logic">
-    Execute `Procedimientos_Almacenados.sql`, `Triggers.sql`, `Seguridad.sql`, and `Mantenimiento_Backups.sql` to activate the full feature set.
+  <Step title="Run the remaining script files">
+    Execute `Procedimientos_Almacenados.sql`, `Triggers.sql`, `Reportes.sql`, `Seguridad.sql`, and `Mantenimiento_Backups.sql` in order. These files are currently unimplemented stubs — they establish the correct execution context and are ready for your custom logic.
   </Step>
 </Steps>

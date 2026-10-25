@@ -4,7 +4,7 @@ sidebarTitle: "Security"
 description: "Reference for the 6 security tables: Rol, Permiso, Rol_Permiso, Usuario, Rol_Usuario, and Bitacora — covering columns, constraints, and relationships."
 ---
 
-The Security domain handles authentication, authorization, and audit logging for the Mundo Escolar system. It defines user accounts, assigns roles, maps granular permissions to those roles, and automatically records all data-modifying actions in the `Bitacora` audit table. Together, these six tables provide a complete role-based access control (RBAC) foundation.
+The Security domain handles authentication, authorization, and audit logging for the Mundo Escolar system. It defines user accounts, assigns roles, and maps granular permissions to those roles. The `Bitacora` table provides a structured audit log for recording data-modifying actions across the system. Together, these six tables provide a complete role-based access control (RBAC) foundation.
 
 ---
 
@@ -159,7 +159,7 @@ The system audit log. Records every significant data-modifying action performed 
 </ParamField>
 
 <ParamField path="Fecha_Hora" type="DATETIME" required>
-  Exact date and time the action was recorded, typically set to `GETDATE()` by the trigger.
+  Exact date and time the action was recorded. Should be set to `GETDATE()` at the time of insert.
 </ParamField>
 
 <ParamField path="Descripcion" type="VARCHAR(255)">
@@ -171,7 +171,7 @@ The system audit log. Records every significant data-modifying action performed 
 </Note>
 
 <Info>
-  `Bitacora` is populated automatically by database triggers that fire on `INSERT`, `UPDATE`, and `DELETE` operations across the system's tables. Application code should **never write directly** to this table — doing so would bypass the trigger chain and could corrupt the audit trail integrity.
+  `Bitacora` is designed to be populated by database triggers or application-layer logic on `INSERT`, `UPDATE`, and `DELETE` operations. The trigger definitions (`Triggers.sql`) are not yet implemented in the current schema. Until triggers are in place, audit entries must be written by the application. Once triggers are deployed, application code should **not** write directly to this table to avoid duplicate entries in the audit trail.
 </Info>
 
 ---
@@ -180,7 +180,7 @@ The system audit log. Records every significant data-modifying action performed 
 
 The following diagram shows all FK relationships within the Security domain:
 
-```
+```text
 Rol ──────────────── Rol_Permiso ──────────────── Permiso
  │                                                   
  └── Rol_Usuario ──── Usuario ──── Bitacora

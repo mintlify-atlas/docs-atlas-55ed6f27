@@ -1,5 +1,5 @@
 ---
-title: "Get Started with Mundo Escolar on SQL Server 2022"
+title: "Get Started with Mundo Escolar on SQL Server 2022 Now"
 sidebarTitle: "Quickstart"
 description: "Deploy the Mundo Escolar database on SQL Server 2022 using SSMS or sqlcmd, configure file paths, and run your first inventory and sales queries."
 ---
@@ -68,14 +68,15 @@ sqlcmd -S localhost -E -i sql\Estructura.sql
 </CodeGroup>
 
 <Tip>
-  Run the seven SQL scripts in this order to build the complete, fully populated database with all stored procedures, triggers, security, and maintenance jobs configured:
+  The repository contains seven SQL files. `Estructura.sql` is fully implemented; the remaining six are stubs reserved for future implementation. Run them in this order as each one becomes available:
 
-  1. `Estructura.sql` — schema and constraints
-  2. `Inserciones.sql` — seed and sample data
-  3. `Procedimientos_Almacenados.sql` — stored procedures
-  4. `Triggers.sql` — database triggers
-  5. `Seguridad.sql` — logins, users, and permission grants
-  6. `Mantenimiento_Backups.sql` — backup and maintenance plans
+  1. `Estructura.sql` — schema and constraints ✅
+  2. `Inserciones.sql` — seed and sample data (stub)
+  3. `Procedimientos_Almacenados.sql` — stored procedures (stub)
+  4. `Triggers.sql` — database triggers (stub)
+  5. `Reportes.sql` — reporting queries (stub)
+  6. `Seguridad.sql` — logins, users, and permission grants (stub)
+  7. `Mantenimiento_Backups.sql` — backup and maintenance plans (stub)
 </Tip>
 
 ## Step 3 — Verify the schema
