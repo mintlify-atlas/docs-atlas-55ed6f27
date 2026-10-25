@@ -1,47 +1,192 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Get Started with Mundo Escolar on SQL Server 2022"
+sidebarTitle: "Quickstart"
+description: "Deploy the Mundo Escolar database on SQL Server 2022 using SSMS or sqlcmd, configure file paths, and run your first inventory and sales queries."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
+This guide walks you through deploying the full **MUNDO\_ESCOLAR** database from scratch — creating the data and log directories, executing the schema script, verifying all 24 tables, and running your first queries against real data. From a clean SQL Server 2022 instance to a working database in under 10 minutes.
 
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
+<Warning>
+  `Estructura.sql` contains an `IF EXISTS ... DROP DATABASE` block at the top. If a database named `MUNDO_ESCOLAR` already exists on your instance it will be **immediately dropped and recreated** — all existing data will be lost. Confirm you are targeting the correct instance before executing the script.
+</Warning>
 
 ## Prerequisites
 
-Before you begin, you must have:
+Before running any scripts, make sure you have the following in place:
 
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
+- **SQL Server 2022** (or a fully compatible edition — Developer, Express, Standard, or Enterprise)
+- **SQL Server Management Studio (SSMS)** 19 or later, **or** the `sqlcmd` command-line utility
+- A local clone of the Mundo Escolar repository containing the `sql/` directory
+- The directories `C:\SQLData\` and `C:\SQLLog\` created on the SQL Server host machine — or alternative paths of your choosing (see Step 1)
+- A login with `sysadmin` or `dbcreator` + `securityadmin` rights on the target instance
 
-## Get started
+## Step 1 — Prepare the environment
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
+  <Step title="Create the data and log directories">
+    SQL Server must be able to write to the file paths specified in `Estructura.sql` before the `CREATE DATABASE` command runs. Open a Command Prompt **as Administrator** on the SQL Server host and create both directories:
 
-    ```bash
-    npm install your-package
+    ```cmd
+    mkdir C:\SQLData
+    mkdir C:\SQLLog
     ```
+
+    If the directories already exist the command is a no-op, so it is safe to run regardless.
   </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
 
-    ```bash
-    your-cli init
-    ```
-  </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+  <Step title="(Optional) Update paths for custom environments">
+    If your SQL Server host uses a different drive letter or directory structure, open `sql\Estructura.sql` in any text editor and update the two `FILENAME` lines inside the `CREATE DATABASE` block:
 
-    ```bash
-    your-cli start
+    ```sql
+    FILENAME = 'C:\SQLData\MUNDO_ESCOLAR_data.mdf',   -- ← change to your data path
+    ...
+    FILENAME = 'C:\SQLLog\MUNDO_ESCOLAR_log.ldf',     -- ← change to your log path
     ```
+
+    Make sure the replacement directories exist and that the SQL Server service account has **read/write** access to them.
   </Step>
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+## Step 2 — Create the database
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
+Execute `Estructura.sql` to create the `MUNDO_ESCOLAR` database, configure file sizes, define all 24 tables, apply foreign keys, and set up unique constraints.
+
+<CodeGroup>
+
+```text SSMS
+1. Open SQL Server Management Studio and connect to your instance.
+2. Go to File → Open → File… and select sql\Estructura.sql from the repository.
+3. Verify the target instance shown in the toolbar is correct.
+4. Click Execute (F5) or press the Execute button in the toolbar.
+5. Confirm the Messages pane shows no errors and ends with the table listing query output.
+```
+
+```cmd sqlcmd
+sqlcmd -S localhost -E -i sql\Estructura.sql
+```
+
+</CodeGroup>
+
+<Tip>
+  Run the seven SQL scripts in this order to build the complete, fully populated database with all stored procedures, triggers, security, and maintenance jobs configured:
+
+  1. `Estructura.sql` — schema and constraints
+  2. `Inserciones.sql` — seed and sample data
+  3. `Procedimientos_Almacenados.sql` — stored procedures
+  4. `Triggers.sql` — database triggers
+  5. `Seguridad.sql` — logins, users, and permission grants
+  6. `Mantenimiento_Backups.sql` — backup and maintenance plans
 </Tip>
+
+## Step 3 — Verify the schema
+
+After `Estructura.sql` completes, run the built-in verification query to confirm all 24 tables were created successfully:
+
+```sql
+USE MUNDO_ESCOLAR
+GO
+SELECT name AS 'Tabla_Creada' FROM sysobjects WHERE TYPE = 'U' ORDER BY name ASC
+GO
+```
+
+The query returns one row per user table, sorted alphabetically. You should see exactly these 24 tables:
+
+| # | Tabla\_Creada |
+|---|---|
+| 1 | Bitacora |
+| 2 | Categoria |
+| 3 | Cliente |
+| 4 | Compra |
+| 5 | Compra\_Producto |
+| 6 | Condicion\_Pago |
+| 7 | Estado\_Factura |
+| 8 | Factura |
+| 9 | Metodo\_Pago |
+| 10 | Movimiento\_Inventario |
+| 11 | Pago |
+| 12 | Permiso |
+| 13 | Producto |
+| 14 | Proveedor |
+| 15 | Rol |
+| 16 | Rol\_Permiso |
+| 17 | Rol\_Usuario |
+| 18 | Servicio |
+| 19 | Tipo\_Cliente |
+| 20 | Tipo\_Movimiento |
+| 21 | Usuario |
+| 22 | Venta |
+| 23 | Venta\_Producto |
+| 24 | Venta\_Servicio |
+
+If any table is missing, check the Messages pane in SSMS (or the sqlcmd output) for the specific error and resolve it before running subsequent scripts.
+
+## Step 4 — Run your first queries
+
+Once seed data has been loaded via `Inserciones.sql`, use these starter queries to explore the three core areas of the database.
+
+### Browse the product catalog
+
+```sql
+USE MUNDO_ESCOLAR
+GO
+
+-- List all active products with their category and reorder point
+SELECT
+    p.Id_Producto,
+    c.Nombre          AS Categoria,
+    p.Nombre          AS Producto,
+    p.Precio_Venta,
+    p.Stock_Actual,
+    p.Punto_Reorden,
+    p.Estado
+FROM Producto p
+INNER JOIN Categoria c ON p.Id_Categoria = c.Id_Categoria
+WHERE p.Estado = 1
+ORDER BY c.Nombre, p.Nombre;
+GO
+```
+
+### View the client directory
+
+```sql
+USE MUNDO_ESCOLAR
+GO
+
+-- List all active clients with their type and payment condition
+SELECT
+    cl.Id_Cliente,
+    cl.Identificacion,
+    cl.Nombre + ' ' + cl.Apellido1 + ' ' + cl.Apellido2 AS Nombre_Completo,
+    tc.Nombre          AS Tipo_Cliente,
+    cp.Nombre          AS Condicion_Pago,
+    cl.Correo,
+    cl.Telefono
+FROM Cliente cl
+INNER JOIN Tipo_Cliente tc   ON cl.Id_Tipo_Cliente    = tc.Id_Tipo_Cliente
+INNER JOIN Condicion_Pago cp ON cl.Id_Condicion_Pago  = cp.Id_Condicion_Pago
+WHERE cl.Estado = 1
+ORDER BY cl.Apellido1, cl.Apellido2, cl.Nombre;
+GO
+```
+
+### Join sales with their clients
+
+```sql
+USE MUNDO_ESCOLAR
+GO
+
+-- Show each sale alongside the client who made it
+SELECT
+    v.Id_Venta,
+    v.Fecha,
+    cl.Nombre + ' ' + cl.Apellido1  AS Cliente,
+    cl.Identificacion,
+    v.Subtotal,
+    v.Impuesto,
+    v.Monto_Total,
+    v.Estado
+FROM Venta v
+INNER JOIN Cliente cl ON v.Id_Cliente = cl.Id_Cliente
+ORDER BY v.Fecha DESC;
+GO
+```

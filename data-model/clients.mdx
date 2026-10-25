@@ -1,0 +1,154 @@
+---
+title: "Client Management Tables: Tipo_Cliente, Condicion_Pago, and Cliente"
+sidebarTitle: "Clients"
+description: "Reference for the 3 client tables in Mundo Escolar — customer types, payment conditions, and the core Cliente record with all contact fields."
+---
+
+The Clients domain manages the full lifecycle of customer records in Mundo Escolar. It defines the categories customers belong to (individual vs. institutional), the payment terms under which they operate, and the core customer record with all contact and identification details. Every `Cliente` row references both a `Tipo_Cliente` and a `Condicion_Pago`, ensuring that billing and credit rules are always applied consistently.
+
+---
+
+## Tipo_Cliente
+
+A catalog table that classifies customers into named types (e.g., retail individual, school institution, government entity). This classification drives reporting and can be used to apply type-specific pricing or discount rules.
+
+<ParamField path="Id_Tipo_Cliente" type="INT IDENTITY(1,1)" required>
+  Surrogate primary key. Auto-incremented by the database engine.
+</ParamField>
+
+<ParamField path="Nombre" type="VARCHAR(50)" required>
+  Display name for the customer type (e.g., `Particular`, `Institucional`, `Gobierno`).
+</ParamField>
+
+<ParamField path="Descripcion" type="VARCHAR(150)">
+  Optional free-text explanation of what this customer type represents and any special rules that apply.
+</ParamField>
+
+<ParamField path="Estado" type="BOOL" required>
+  Active/inactive flag. `1` = type is available for assignment to new customers, `0` = archived.
+</ParamField>
+
+<Note>
+  **Constraints:** `PK_Tipo_Cliente` on `Id_Tipo_Cliente`
+</Note>
+
+---
+
+## Condicion_Pago
+
+A catalog table that defines the payment terms offered to customers. Terms can range from immediate cash payment to extended credit periods, and the `Dias_Credito` field drives due-date calculations on invoices.
+
+<ParamField path="Id_Condicion_Pago" type="INT IDENTITY(1,1)" required>
+  Surrogate primary key. Auto-incremented by the database engine.
+</ParamField>
+
+<ParamField path="Nombre" type="VARCHAR(50)" required>
+  Short label for the payment condition (e.g., `Contado`, `Crédito 15 días`, `Crédito 30 días`).
+</ParamField>
+
+<ParamField path="Dias_Credito" type="INT" required>
+  Number of calendar days the customer has to pay after an invoice is issued. Use `0` for immediate/cash payment conditions.
+</ParamField>
+
+<ParamField path="Descripcion" type="VARCHAR(150)">
+  Optional description with additional terms or notes (e.g., early payment discount eligibility).
+</ParamField>
+
+<ParamField path="Estado" type="BOOL" required>
+  Active/inactive flag. `1` = condition is available for assignment to customers, `0` = archived.
+</ParamField>
+
+<Note>
+  **Constraints:** `PK_Condicion_Pago` on `Id_Condicion_Pago`
+</Note>
+
+---
+
+## Cliente
+
+The core customer record. Each row represents one customer — either an individual (person) or an institutional account. The `Nombre_Institucional` column distinguishes institutional customers from individuals without requiring a separate table.
+
+<ParamField path="Id_Cliente" type="INT IDENTITY(1,1)" required>
+  Surrogate primary key. Auto-incremented by the database engine.
+</ParamField>
+
+<ParamField path="Id_Tipo_Cliente" type="INT" required>
+  Foreign key referencing `Tipo_Cliente.Id_Tipo_Cliente`. Classifies this customer (e.g., individual, institutional).
+</ParamField>
+
+<ParamField path="Id_Condicion_Pago" type="INT" required>
+  Foreign key referencing `Condicion_Pago.Id_Condicion_Pago`. Determines the credit days and payment terms that apply to this customer's invoices.
+</ParamField>
+
+<ParamField path="Id_Usuario" type="INT" required>
+  Foreign key referencing `Usuario.Id_Usuario`. Records which system user created or manages this customer account.
+</ParamField>
+
+<ParamField path="Identificacion" type="VARCHAR(100)" required>
+  National ID number, passport number, or tax identification number for the customer. Must be unique across all customers — enforced by `UQ_Cliente_Identificacion`.
+</ParamField>
+
+<ParamField path="Nombre" type="VARCHAR(50)" required>
+  Customer's given name (first name).
+</ParamField>
+
+<ParamField path="Apellido1" type="VARCHAR(100)" required>
+  Customer's first family name (paternal surname).
+</ParamField>
+
+<ParamField path="Apellido2" type="VARCHAR(100)" required>
+  Customer's second family name (maternal surname).
+</ParamField>
+
+<ParamField path="Nombre_Institucional" type="VARCHAR(150)">
+  **Nullable.** The legal or trade name of the institution when the customer represents an organization rather than an individual (e.g., `Colegio Santa María`, `Ministerio de Educación`). Leave `NULL` for individual customers.
+</ParamField>
+
+<ParamField path="Correo" type="VARCHAR(150)" required>
+  Customer's email address. Used for invoice delivery and communications.
+</ParamField>
+
+<ParamField path="Telefono" type="VARCHAR(50)" required>
+  Customer's contact telephone number. Stored as `VARCHAR` to accommodate different formats and country codes.
+</ParamField>
+
+<ParamField path="Direccion" type="VARCHAR(250)" required>
+  Customer's billing/delivery address as free text.
+</ParamField>
+
+<ParamField path="Estado" type="BOOL" required>
+  Active/inactive flag. `1` = customer is active and can be selected in new transactions, `0` = deactivated.
+</ParamField>
+
+<Note>
+  **Constraints:** `PK_Cliente` on `Id_Cliente` · `UQ_Cliente_Identificacion` on `Identificacion`
+  **Foreign keys:** `FK_Cliente_Tipo_Cliente` → `Tipo_Cliente(Id_Tipo_Cliente)` · `FK_Cliente_Condicion_Pago` → `Condicion_Pago(Id_Condicion_Pago)` · `FK_Cliente_Usuario` → `Usuario(Id_Usuario)`
+</Note>
+
+---
+
+## Typical Customer Profiles
+
+The following describes typical field values for each customer type:
+
+**Individual customer (`Tipo_Cliente = 'Particular'`):**
+A student or parent purchasing school supplies. The `Identificacion` holds their national ID number, `Nombre` / `Apellido1` / `Apellido2` hold the person's full name, and `Nombre_Institucional` is left `NULL`. Payment condition is typically `Contado` (0 credit days).
+
+**Institutional customer (`Tipo_Cliente = 'Institucional'`):**
+A school or government body ordering in bulk. The `Identificacion` holds the organization's legal tax number, `Nombre` / `Apellido1` / `Apellido2` reflect the primary contact person's name, and `Nombre_Institucional` contains the organization's legal name (e.g., `Colegio Técnico San José`). Payment condition is often a credit term of 15 or 30 days.
+
+---
+
+## Foreign-Key Relationships
+
+```
+Tipo_Cliente ──────────┐
+                        ├── Cliente
+Condicion_Pago ────────┘
+                        │
+Usuario ────────────────┘
+```
+
+- `Cliente.Id_Tipo_Cliente` → `Tipo_Cliente.Id_Tipo_Cliente`
+- `Cliente.Id_Condicion_Pago` → `Condicion_Pago.Id_Condicion_Pago`
+- `Cliente.Id_Usuario` → `Usuario.Id_Usuario`

@@ -1,0 +1,225 @@
+---
+title: "Reporting Queries for Mundo Escolar"
+sidebarTitle: "Reports"
+description: "Ready-to-run SQL reporting queries for sales summaries, inventory status, billing aging, and purchase history — all targeting the Mundo Escolar schema."
+---
+
+`Reportes.sql` is the designated file for reporting queries in MUNDO_ESCOLAR. The file is currently a stub ready for implementation. This page documents the essential reports that developers should add to the file, written against the exact column names and data types defined in `Estructura.sql`. Once a query is validated, it can be saved as a view or wrapped in a stored procedure for easy reuse from application dashboards or BI tools.
+
+<Tip>
+Wrap any frequently-run report as a stored procedure (in `Procedimientos_Almacenados.sql`) or as a view so that application code and dashboards can call it by name without embedding raw SQL. Views are especially useful for read-only reports — they can be SELECTed like tables and have their own permission grants applied via `GRANT SELECT ON vw_ResumenDiario TO rol_contabilidad`.
+</Tip>
+
+---
+
+## Sales Reports
+
+### Daily Sales Summary
+
+Groups confirmed sales by calendar day and returns total count, subtotals, tax, and grand totals. Excludes cancelled sales (`Estado != 'Anulada'`).
+
+```sql
+-- Daily sales summary
+SELECT
+    CAST(Fecha AS DATE)      AS Dia,
+    COUNT(*)                 AS Num_Ventas,
+    SUM(Subtotal)            AS Total_Subtotal,
+    SUM(Impuesto)            AS Total_Impuesto,
+    SUM(Monto_Total)         AS Total_General
+FROM Venta
+WHERE Estado != 'Anulada'
+GROUP BY CAST(Fecha AS DATE)
+ORDER BY Dia DESC;
+```
+
+### Top 10 Products by Revenue
+
+Joins `Venta_Producto` to `Producto` and ranks by the number of times each product appears across all sale lines. Useful for identifying bestsellers.
+
+```sql
+-- Top 10 products by number of sales
+SELECT TOP 10
+    p.Nombre,
+    COUNT(vp.Id_Venta_Producto) AS Veces_Vendido,
+    p.Precio_Venta
+FROM Venta_Producto vp
+INNER JOIN Producto p ON vp.Id_Producto = p.Id_Producto
+GROUP BY p.Nombre, p.Precio_Venta
+ORDER BY Veces_Vendido DESC;
+```
+
+### Sales by User (Seller Performance)
+
+Shows each seller's contribution, joining `Venta` to `Usuario` to display `Nombre_Usuario` alongside their sales totals.
+
+```sql
+-- Sales totals grouped by seller
+SELECT
+    u.Nombre_Usuario,
+    COUNT(v.Id_Venta)        AS Num_Ventas,
+    SUM(v.Monto_Total)       AS Total_Vendido
+FROM Venta v
+INNER JOIN Usuario u ON v.Id_Usuario = u.Id_Usuario
+WHERE v.Estado != 'Anulada'
+GROUP BY u.Nombre_Usuario
+ORDER BY Total_Vendido DESC;
+```
+
+### Sales Including Service Lines
+
+Combines product and service revenue per sale to give a complete picture of what each transaction was worth.
+
+```sql
+-- Per-sale revenue split between products and services
+SELECT
+    v.Id_Venta,
+    v.Fecha,
+    ISNULL(SUM(DISTINCT TRY_CAST(vp.Subtotal AS DECIMAL(12,2))), 0) AS Subtotal_Productos,
+    ISNULL(SUM(DISTINCT vs.Subtotal), 0)                            AS Subtotal_Servicios,
+    v.Monto_Total
+FROM Venta v
+LEFT JOIN Venta_Producto vp ON v.Id_Venta = vp.Id_Venta
+LEFT JOIN Venta_Servicio vs ON v.Id_Venta = vs.Id_Venta
+WHERE v.Estado != 'Anulada'
+GROUP BY v.Id_Venta, v.Fecha, v.Monto_Total
+ORDER BY v.Fecha DESC;
+```
+
+<Note>
+`Venta_Producto.Subtotal` is defined as `VARCHAR(50)` in the schema. Use `TRY_CAST(Subtotal AS DECIMAL(12,2))` in any arithmetic to avoid implicit conversion errors. Values that cannot be cast will return `NULL`, which `ISNULL` or `COALESCE` can then convert to `0`.
+</Note>
+
+---
+
+## Inventory Reports
+
+### Products Below Reorder Point
+
+Returns all active products whose current stock is at or below the configured reorder threshold. `Stock_Actual` is `VARCHAR(50)`, so `TRY_CAST` is required for the numeric comparison.
+
+```sql
+-- Products at or below reorder point
+SELECT
+    p.Id_Producto,
+    p.Nombre,
+    p.Stock_Actual,
+    p.Punto_Reorden,
+    c.Nombre AS Categoria
+FROM Producto p
+INNER JOIN Categoria c ON p.Id_Categoria = c.Id_Categoria
+WHERE TRY_CAST(p.Stock_Actual AS INT) <= p.Punto_Reorden
+  AND p.Estado = 1;
+```
+
+### Full Inventory Valuation
+
+Multiplies `Stock_Actual` by `Precio_Venta` to estimate the current value of on-hand stock per product.
+
+```sql
+-- Inventory valuation at retail price
+SELECT
+    p.Nombre,
+    c.Nombre                                       AS Categoria,
+    TRY_CAST(p.Stock_Actual AS INT)                AS Stock_Actual,
+    p.Precio_Venta,
+    TRY_CAST(p.Stock_Actual AS INT) * p.Precio_Venta AS Valor_Inventario
+FROM Producto p
+INNER JOIN Categoria c ON p.Id_Categoria = c.Id_Categoria
+WHERE p.Estado = 1
+ORDER BY Valor_Inventario DESC;
+```
+
+### Recent Inventory Movements
+
+Shows the last 100 movements from `Movimiento_Inventario`, joining to `Producto`, `Tipo_Movimiento`, and `Usuario` for full context.
+
+```sql
+-- Recent inventory movements with context
+SELECT TOP 100
+    mi.Fecha,
+    p.Nombre                AS Producto,
+    tm.Nombre               AS Tipo_Movimiento,
+    tm.Naturaleza,
+    mi.Cantidad,
+    mi.Motivo,
+    u.Nombre_Usuario        AS Responsable
+FROM Movimiento_Inventario mi
+INNER JOIN Producto         p  ON mi.Id_Producto          = p.Id_Producto
+INNER JOIN Tipo_Movimiento  tm ON mi.Id_Tipo_Movimiento    = tm.Id_Tipo_Movimiento
+INNER JOIN Usuario          u  ON mi.Id_Usuario            = u.Id_Usuario
+ORDER BY mi.Fecha DESC;
+```
+
+---
+
+## Billing Reports
+
+### Aging Report — Overdue Invoices
+
+Lists all invoices with an outstanding balance past their due date, ordered by the number of days overdue. Use this report for collections follow-up.
+
+```sql
+-- Overdue invoices
+SELECT
+    f.Id_Factura,
+    f.Fecha_Vencimiento,
+    f.Monto_Total,
+    f.Saldo_Pendiente,
+    DATEDIFF(DAY, f.Fecha_Vencimiento, GETDATE()) AS Dias_Vencido
+FROM Factura f
+INNER JOIN Estado_Factura ef ON f.Id_Estado_Factura = ef.Id_Estado_Factura
+WHERE f.Saldo_Pendiente > 0
+  AND f.Fecha_Vencimiento < GETDATE()
+ORDER BY Dias_Vencido DESC;
+```
+
+### Payment History per Client
+
+Returns all payments made by a specific client, joining `Pago` through `Factura` and `Venta` to `Cliente`.
+
+```sql
+-- Payment history for a specific client (@Id_Cliente)
+DECLARE @Id_Cliente INT = 1;
+
+SELECT
+    p.Fecha_Pago,
+    p.Monto_Pagado,
+    mp.Nombre               AS Metodo_Pago,
+    p.Numero_Referencia,
+    f.Id_Factura,
+    f.Saldo_Pendiente
+FROM Pago p
+INNER JOIN Metodo_Pago  mp ON p.Id_Metodo_Pago  = mp.Id_Metodo_Pago
+INNER JOIN Factura       f ON p.Id_Factura       = f.Id_Factura
+INNER JOIN Venta         v ON f.Id_Venta         = v.Id_Venta
+WHERE v.Id_Cliente = @Id_Cliente
+  AND p.Estado = 1
+ORDER BY p.Fecha_Pago DESC;
+```
+
+---
+
+## Purchase Reports
+
+### Purchase History by Supplier
+
+Returns all purchase headers and their line items for a given supplier, useful for reconciling deliveries and negotiating terms.
+
+```sql
+-- Purchase history by supplier (@Id_Proveedor)
+DECLARE @Id_Proveedor INT = 1;
+
+SELECT
+    c.Id_Compra,
+    c.Fecha_Compra,
+    c.Estado,
+    p.Nombre                AS Producto,
+    cp.Cantidad,
+    cp.Costo_Unitario,
+    cp.Subtotal
+FROM Compra c
+INNER JOIN Compra_Producto cp ON c.Id_Compra    = cp.Id_Compra
+INNER JOIN Producto        p  ON cp.Id_Producto = p.Id_Producto
+WHERE c.Id_Proveedor = @Id_Proveedor
+ORDER BY c.Fecha_Compra DESC;
+```

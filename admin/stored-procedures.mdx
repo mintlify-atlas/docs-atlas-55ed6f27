@@ -1,0 +1,114 @@
+---
+title: "Stored Procedures Guide for Mundo Escolar"
+sidebarTitle: "Stored Procedures"
+description: "How to write and organize stored procedures for Mundo Escolar — recommended patterns for CRUD operations, business logic, and transaction management in T-SQL."
+---
+
+`Procedimientos_Almacenados.sql` is the designated file for all business logic stored procedures in the MUNDO_ESCOLAR database. The file is currently a stub containing only the `USE MUNDO_ESCOLAR` context switch and is ready for implementation. Every stored procedure that encapsulates a business operation — from registering a sale to adjusting inventory — should be written and maintained in this file.
+
+## Recommended Stored Procedures
+
+The procedures below are organized by business domain. Each name follows the `sp_<Verbo><Entidad>` convention used throughout the project.
+
+### Sales
+
+| Procedure | Purpose |
+|---|---|
+| `sp_RegistrarVenta` | Creates a new sale header in `Venta`, inserts product lines into `Venta_Producto` and service lines into `Venta_Servicio`, recalculates `Subtotal` / `Monto_Total`, and writes a debit entry to `Movimiento_Inventario`. |
+| `sp_AnularVenta` | Sets `Venta.Estado` to `'Anulada'`, reverses the stock deduction by inserting a credit movement in `Movimiento_Inventario`, and updates the associated `Factura.Saldo_Pendiente` if a billing record exists. |
+
+### Purchases
+
+| Procedure | Purpose |
+|---|---|
+| `sp_RegistrarCompra` | Inserts a header row in `Compra` and one or more detail rows in `Compra_Producto`. For each product line it also inserts a credit entry in `Movimiento_Inventario` and updates `Producto.Stock_Actual`. |
+| `sp_ConsultarComprasPorProveedor` | Returns all `Compra` headers and `Compra_Producto` lines for a given `@Id_Proveedor`, optionally filtered by date range. |
+
+### Inventory
+
+| Procedure | Purpose |
+|---|---|
+| `sp_AjustarStock` | Performs a manual inventory adjustment. Accepts `@Id_Producto`, `@Cantidad` (positive or negative), `@Motivo`, and `@Id_Tipo_Movimiento`. Inserts into `Movimiento_Inventario` and updates `Producto.Stock_Actual`. |
+| `sp_ConsultarProductosBajoReorden` | Returns all active products where `TRY_CAST(Stock_Actual AS INT) <= Punto_Reorden`. Useful for procurement dashboards. Note that `Stock_Actual` is stored as `VARCHAR(50)`, so the cast is required. |
+
+### Billing
+
+| Procedure | Purpose |
+|---|---|
+| `sp_GenerarFactura` | Creates a row in `Factura` linked to an existing `Venta`. Sets `Fecha_Emision`, calculates `Fecha_Vencimiento` from `Condicion_Pago.Dias_Credito`, copies `Monto_Total` from the sale, and initializes `Saldo_Pendiente` equal to `Monto_Total`. |
+| `sp_RegistrarPago` | Inserts a row in `Pago` and decrements `Factura.Saldo_Pendiente` by `@Monto_Pagado`. Updates `Factura.Id_Estado_Factura` to the paid state when `Saldo_Pendiente` reaches zero. |
+| `sp_ConsultarSaldoPendiente` | Returns `Factura` rows where `Saldo_Pendiente > 0` for a given `@Id_Cliente` or for all clients. |
+
+### Clients
+
+| Procedure | Purpose |
+|---|---|
+| `sp_CrearCliente` | Validates that `Identificacion` does not already exist (enforced by `UQ_Cliente_Identificacion`), then inserts a new row in `Cliente` with its `Tipo_Cliente`, `Condicion_Pago`, and the creating `Usuario`. |
+| `sp_ActualizarCliente` | Updates mutable fields on `Cliente` (`Correo`, `Telefono`, `Direccion`, `Estado`, etc.) and logs the change to `Bitacora`. |
+
+---
+
+## Implementation Pattern
+
+Use the template below as a starting point for every new stored procedure. It demonstrates the recommended structure: parameter declaration, `SET NOCOUNT ON`, explicit transaction scope, and structured error handling.
+
+```sql
+CREATE PROCEDURE sp_RegistrarVenta
+    @Id_Cliente INT,
+    @Id_Usuario INT,
+    @Impuesto    DECIMAL(12,2)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        BEGIN TRANSACTION;
+
+        -- 1. Insert Venta header
+        INSERT INTO Venta (Id_Cliente, Id_Usuario, Fecha, Subtotal, Impuesto, Monto_Total, Estado)
+        VALUES (@Id_Cliente, @Id_Usuario, GETDATE(), 0, @Impuesto, 0, 'Pendiente');
+
+        DECLARE @Id_Venta INT = SCOPE_IDENTITY();
+
+        -- 2. Add line items (use a table-valued parameter or cursor)
+        -- 3. Recalculate totals
+        -- 4. Update stock via Movimiento_Inventario
+
+        COMMIT TRANSACTION;
+        SELECT @Id_Venta AS Id_Venta_Creada;
+    END TRY
+    BEGIN CATCH
+        ROLLBACK TRANSACTION;
+        THROW;
+    END CATCH
+END
+GO
+```
+
+<Tip>
+Always include `SET NOCOUNT ON` at the top of every stored procedure to suppress the "rows affected" messages that would otherwise be sent to the caller. Pair it with `BEGIN TRY / BEGIN CATCH` so that any runtime error automatically rolls back the transaction and re-raises the original error via `THROW`.
+</Tip>
+
+<Note>
+Business-critical operations (creating a sale, cancelling an invoice, adjusting stock) should leave a trace in the `Bitacora` table. This can be done inside the stored procedure with an explicit `INSERT INTO Bitacora` statement, or automatically via an AFTER trigger on the affected table. See the [Triggers guide](/admin/triggers) for the trigger-based approach.
+</Note>
+
+---
+
+## File Location
+
+All stored procedures must be added to `sql/Procedimientos_Almacenados.sql`. After adding or modifying a procedure, re-run the entire file against the MUNDO_ESCOLAR database to apply the changes. If a procedure already exists, wrap the `CREATE` statement with a conditional drop or use `CREATE OR ALTER PROCEDURE` (available since SQL Server 2016) to simplify idempotent deployments:
+
+```sql
+USE MUNDO_ESCOLAR
+GO
+
+CREATE OR ALTER PROCEDURE sp_RegistrarVenta
+    -- parameters ...
+AS
+BEGIN
+    -- implementation ...
+END
+GO
+```
+
+This makes the file safe to run repeatedly without manual cleanup steps.

@@ -1,0 +1,87 @@
+{
+  "projectType": "data-platform",
+  "projectName": "Mundo Escolar",
+  "projectDescription": "A normalized SQL Server 2022 database system for a school bookstore and stationery shop, covering inventory, sales, purchases, billing, and role-based security.",
+  "theme": "aspen",
+  "primaryColor": "#1A6B3C",
+  "lightColor": "#E8F5EE",
+  "darkColor": "#0F3D22",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": ["introduction", "quickstart"]
+          },
+          {
+            "group": "Data Model",
+            "pages": [
+              "data-model/overview",
+              "data-model/security",
+              "data-model/clients",
+              "data-model/inventory",
+              "data-model/purchases",
+              "data-model/sales",
+              "data-model/billing"
+            ]
+          },
+          {
+            "group": "Admin Guide",
+            "pages": [
+              "admin/stored-procedures",
+              "admin/triggers",
+              "admin/security",
+              "admin/reports",
+              "admin/backup-maintenance"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Fully normalized relational schema with 24 tables across 5 business domains",
+    "Role-based access control with Roles, Permissions, and a User audit log (Bitácora)",
+    "Inventory management with product categories, stock tracking, and reorder points",
+    "Purchase order system with supplier management and itemized purchase detail",
+    "Sales transactions covering both products and services with tax calculation",
+    "Invoice and payment lifecycle with multiple payment methods and credit conditions",
+    "Custom BOOL alias type for BIT columns for MER compatibility",
+    "Structured file layout for stored procedures, triggers, reports, security, and backups"
+  ],
+  "publicApiSurface": [
+    "Table: Tipo_Cliente",
+    "Table: Condicion_Pago",
+    "Table: Rol",
+    "Table: Permiso",
+    "Table: Rol_Permiso",
+    "Table: Usuario",
+    "Table: Rol_Usuario",
+    "Table: Bitacora",
+    "Table: Cliente",
+    "Table: Tipo_Movimiento",
+    "Table: Categoria",
+    "Table: Producto",
+    "Table: Proveedor",
+    "Table: Compra",
+    "Table: Compra_Producto",
+    "Table: Movimiento_Inventario",
+    "Table: Servicio",
+    "Table: Venta",
+    "Table: Venta_Producto",
+    "Table: Venta_Servicio",
+    "Table: Estado_Factura",
+    "Table: Factura",
+    "Table: Metodo_Pago",
+    "Table: Pago",
+    "File: Estructura.sql",
+    "File: Inserciones.sql",
+    "File: Procedimientos_Almacenados.sql",
+    "File: Triggers.sql",
+    "File: Reportes.sql",
+    "File: Seguridad.sql",
+    "File: Mantenimiento_Backups.sql"
+  ]
+}

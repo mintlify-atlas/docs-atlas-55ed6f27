@@ -1,0 +1,193 @@
+---
+title: "Security & User Management Tables in Mundo Escolar"
+sidebarTitle: "Security"
+description: "Reference for the 6 security tables: Rol, Permiso, Rol_Permiso, Usuario, Rol_Usuario, and Bitacora — covering columns, constraints, and relationships."
+---
+
+The Security domain handles authentication, authorization, and audit logging for the Mundo Escolar system. It defines user accounts, assigns roles, maps granular permissions to those roles, and automatically records all data-modifying actions in the `Bitacora` audit table. Together, these six tables provide a complete role-based access control (RBAC) foundation.
+
+---
+
+## Rol
+
+Represents a named role that can be assigned to one or more users. Roles are the primary vehicle for grouping permissions.
+
+<ParamField path="Id_Rol" type="INT IDENTITY(1,1)" required>
+  Surrogate primary key. Auto-incremented by the database engine.
+</ParamField>
+
+<ParamField path="Nombre" type="VARCHAR(100)" required>
+  Display name of the role (e.g., `Administrador`, `Cajero`, `Bodega`). Must be unique across all roles — enforced by `UQ_Rol_Nombre`.
+</ParamField>
+
+<ParamField path="Descripcion" type="VARCHAR(150)">
+  Optional free-text description of the role's purpose and scope.
+</ParamField>
+
+<ParamField path="Estado" type="BOOL" required>
+  Active/inactive flag. `1` = active, `0` = inactive. Uses the custom `BOOL` alias (`BIT`).
+</ParamField>
+
+<Note>
+  **Constraints:** `PK_Rol` on `Id_Rol` · `UQ_Rol_Nombre` on `Nombre`
+</Note>
+
+---
+
+## Permiso
+
+Represents a single granular permission that can be granted to a role. Permissions are defined independently of roles to allow flexible assignment.
+
+<ParamField path="Id_Permiso" type="INT IDENTITY(1,1)" required>
+  Surrogate primary key. Auto-incremented by the database engine.
+</ParamField>
+
+<ParamField path="Nombre" type="VARCHAR(100)" required>
+  Unique identifier name for the permission (e.g., `CREAR_VENTA`, `VER_REPORTES`). Must be unique — enforced by `UQ_Permiso_Nombre`.
+</ParamField>
+
+<ParamField path="Descripcion" type="VARCHAR(255)">
+  Optional description explaining what this permission grants access to.
+</ParamField>
+
+<Note>
+  **Constraints:** `PK_Permiso` on `Id_Permiso` · `UQ_Permiso_Nombre` on `Nombre`
+</Note>
+
+---
+
+## Rol_Permiso
+
+Junction table that maps permissions to roles in a many-to-many relationship. Each row grants one permission to one role.
+
+<ParamField path="Id_Rol_Permiso" type="INT IDENTITY(1,1)" required>
+  Surrogate primary key for the junction row.
+</ParamField>
+
+<ParamField path="Id_Rol" type="INT" required>
+  Foreign key referencing `Rol.Id_Rol`. Identifies which role is being granted the permission.
+</ParamField>
+
+<ParamField path="Id_Permiso" type="INT" required>
+  Foreign key referencing `Permiso.Id_Permiso`. Identifies which permission is being granted.
+</ParamField>
+
+<Note>
+  **Constraints:** `PK_Rol_Permiso` on `Id_Rol_Permiso` · `FK_Rol_Permiso_Rol` → `Rol(Id_Rol)` · `FK_Rol_Permiso_Permiso` → `Permiso(Id_Permiso)`
+</Note>
+
+---
+
+## Usuario
+
+Stores the credentials and metadata for each system user. A user account is required before assigning roles or recording audit events.
+
+<ParamField path="Id_Usuario" type="INT IDENTITY(1,1)" required>
+  Surrogate primary key. Auto-incremented by the database engine.
+</ParamField>
+
+<ParamField path="Nombre_Usuario" type="VARCHAR(50)" required>
+  Username used for login. Not required to be unique at the constraint level, but should be unique by application policy.
+</ParamField>
+
+<ParamField path="Correo" type="VARCHAR(100)" required>
+  User's email address. Must be unique across all accounts — enforced by `UQ_Usuario_Correo`.
+</ParamField>
+
+<ParamField path="Contrasena" type="VARCHAR(255)" required>
+  Hashed password string. The application layer is responsible for hashing before storage; plain-text passwords must never be stored.
+</ParamField>
+
+<ParamField path="Fecha_Registro" type="DATETIME" required>
+  Timestamp when the user account was created.
+</ParamField>
+
+<ParamField path="Estado" type="BOOL" required>
+  Active/inactive flag. `1` = active (can log in), `0` = disabled.
+</ParamField>
+
+<Note>
+  **Constraints:** `PK_Usuario` on `Id_Usuario` · `UQ_Usuario_Correo` on `Correo`
+</Note>
+
+---
+
+## Rol_Usuario
+
+Junction table that assigns roles to users in a many-to-many relationship. A single user may hold multiple roles simultaneously.
+
+<ParamField path="Id_Rol_Usuario" type="INT IDENTITY(1,1)" required>
+  Surrogate primary key for the junction row.
+</ParamField>
+
+<ParamField path="Id_Rol" type="INT" required>
+  Foreign key referencing `Rol.Id_Rol`. Identifies which role is being assigned.
+</ParamField>
+
+<ParamField path="Id_Usuario" type="INT" required>
+  Foreign key referencing `Usuario.Id_Usuario`. Identifies which user receives the role.
+</ParamField>
+
+<Note>
+  **Constraints:** `PK_Rol_Usuario` on `Id_Rol_Usuario` · `FK_Rol_Usuario_Rol` → `Rol(Id_Rol)` · `FK_Rol_Usuario_Usuario` → `Usuario(Id_Usuario)`
+</Note>
+
+---
+
+## Bitacora
+
+The system audit log. Records every significant data-modifying action performed by any user, capturing which table was affected, which row, and when.
+
+<ParamField path="Id_Bitacora" type="INT IDENTITY(1,1)" required>
+  Surrogate primary key. Auto-incremented for each audit entry.
+</ParamField>
+
+<ParamField path="Id_Usuario" type="INT" required>
+  Foreign key referencing `Usuario.Id_Usuario`. The user who performed the action.
+</ParamField>
+
+<ParamField path="Accion" type="VARCHAR(100)" required>
+  The type of operation performed (e.g., `INSERT`, `UPDATE`, `DELETE`, `LOGIN`).
+</ParamField>
+
+<ParamField path="Tabla_Afectada" type="VARCHAR(100)" required>
+  Name of the database table that was modified by the action.
+</ParamField>
+
+<ParamField path="Id_Registro_Afectado" type="INT" required>
+  The primary key value of the specific row that was inserted, updated, or deleted.
+</ParamField>
+
+<ParamField path="Fecha_Hora" type="DATETIME" required>
+  Exact date and time the action was recorded, typically set to `GETDATE()` by the trigger.
+</ParamField>
+
+<ParamField path="Descripcion" type="VARCHAR(255)">
+  Optional additional context about the action (e.g., old value, reason for change).
+</ParamField>
+
+<Note>
+  **Constraints:** `PK_Bitacora` on `Id_Bitacora` · `FK_Bitacora_Usuario` → `Usuario(Id_Usuario)`
+</Note>
+
+<Info>
+  `Bitacora` is populated automatically by database triggers that fire on `INSERT`, `UPDATE`, and `DELETE` operations across the system's tables. Application code should **never write directly** to this table — doing so would bypass the trigger chain and could corrupt the audit trail integrity.
+</Info>
+
+---
+
+## Foreign-Key Relationships
+
+The following diagram shows all FK relationships within the Security domain:
+
+```
+Rol ──────────────── Rol_Permiso ──────────────── Permiso
+ │                                                   
+ └── Rol_Usuario ──── Usuario ──── Bitacora
+```
+
+- `Rol_Permiso.Id_Rol` → `Rol.Id_Rol`
+- `Rol_Permiso.Id_Permiso` → `Permiso.Id_Permiso`
+- `Rol_Usuario.Id_Rol` → `Rol.Id_Rol`
+- `Rol_Usuario.Id_Usuario` → `Usuario.Id_Usuario`
+- `Bitacora.Id_Usuario` → `Usuario.Id_Usuario`

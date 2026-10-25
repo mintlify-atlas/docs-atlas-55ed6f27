@@ -1,0 +1,100 @@
+---
+title: "Triggers for Audit Logging and Business Rules in Mundo Escolar"
+sidebarTitle: "Triggers"
+description: "How to implement AFTER INSERT/UPDATE/DELETE triggers in Mundo Escolar for automatic audit logging to Bitacora and enforcing business rules."
+---
+
+`Triggers.sql` is the designated file for all database triggers in MUNDO_ESCOLAR. Triggers automate audit logging to the `Bitacora` table and enforce business rules that cannot be expressed as simple column constraints or foreign keys — such as cascading stock updates when a purchase line is recorded, or warning when a product falls below its reorder threshold. Because triggers fire transparently on every DML statement, they provide a reliable safety net that works regardless of which application, stored procedure, or user account performs the write.
+
+## Recommended Triggers
+
+The triggers below cover the most critical tables in the schema. Each one should be created inside `sql/Triggers.sql` and executed in the context of `USE MUNDO_ESCOLAR`.
+
+### `trg_Venta_Audit`
+
+Fires `AFTER INSERT`, `AFTER UPDATE`, and `AFTER DELETE` on the `Venta` table. For each affected row it inserts a record into `Bitacora` capturing the action type (`'INSERT'`, `'UPDATE'`, or `'DELETE'`), the `Id_Venta`, the responsible `Id_Usuario`, and a human-readable description. This provides a full history of sale creation, modification, and cancellation without requiring application-layer code changes.
+
+### `trg_Producto_StockBajo`
+
+Fires `AFTER UPDATE` on `Producto`. After any change to `Stock_Actual`, it compares `TRY_CAST(Stock_Actual AS INT)` (the column is `VARCHAR(50)`) against `Punto_Reorden`. When stock is at or below the reorder point, the trigger inserts a warning row into `Bitacora` with `Accion = 'ALERTA_STOCK_BAJO'`, giving the purchasing team a queryable log of when replenishment is needed.
+
+### `trg_Pago_ActualizarSaldo`
+
+Fires `AFTER INSERT` on `Pago`. It decrements `Factura.Saldo_Pendiente` by `Monto_Pagado` for the related invoice. When `Saldo_Pendiente` reaches zero, the trigger updates `Factura.Id_Estado_Factura` to the fully-paid status, keeping billing state consistent without relying on application logic.
+
+### `trg_Compra_ActualizarStock`
+
+Fires `AFTER INSERT` on `Compra_Producto`. For every newly inserted purchase line it adds the purchased `Cantidad` to `Producto.Stock_Actual` and writes a credit entry to `Movimiento_Inventario` (using the appropriate `Id_Tipo_Movimiento` for incoming stock). This ensures inventory levels are updated atomically alongside the purchase record.
+
+---
+
+## Audit Trigger Pattern
+
+The example below shows a complete `AFTER INSERT` trigger that writes to `Bitacora`. Use the same structure for `AFTER UPDATE` and `AFTER DELETE` triggers — just swap the action string and source pseudo-table (`inserted` vs. `deleted`).
+
+```sql
+CREATE TRIGGER trg_Venta_Insert_Audit
+ON Venta
+AFTER INSERT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    INSERT INTO Bitacora (Id_Usuario, Accion, Tabla_Afectada, Id_Registro_Afectado, Fecha_Hora, Descripcion)
+    SELECT
+        i.Id_Usuario,
+        'INSERT',
+        'Venta',
+        i.Id_Venta,
+        GETDATE(),
+        'Nueva venta registrada'
+    FROM inserted i;
+END
+GO
+```
+
+For `AFTER UPDATE` and `AFTER DELETE` on the same table, create separate trigger objects (e.g. `trg_Venta_Update_Audit`, `trg_Venta_Delete_Audit`) or combine them into a single trigger and use `IF EXISTS (SELECT 1 FROM inserted) AND EXISTS (SELECT 1 FROM deleted)` to distinguish updates from deletes.
+
+---
+
+## Bitacora Table Reference
+
+Every trigger that writes to `Bitacora` must supply values for all non-nullable columns. The table definition from `Estructura.sql` is reproduced here for quick reference:
+
+| Column | Type | Description |
+|---|---|---|
+| `Id_Bitacora` | `INT IDENTITY` | Auto-generated primary key — do not supply a value. |
+| `Id_Usuario` | `INT` | Foreign key to `Usuario`. Read from `inserted.Id_Usuario` or `deleted.Id_Usuario`. |
+| `Accion` | `VARCHAR(100)` | Action descriptor — e.g. `'INSERT'`, `'UPDATE'`, `'DELETE'`, `'ALERTA_STOCK_BAJO'`. |
+| `Tabla_Afectada` | `VARCHAR(100)` | Name of the table on which the trigger fired — e.g. `'Venta'`, `'Producto'`. |
+| `Id_Registro_Afectado` | `INT` | Primary key of the row that was changed. |
+| `Fecha_Hora` | `DATETIME` | Timestamp of the event — use `GETDATE()`. |
+| `Descripcion` | `VARCHAR(255)` | Optional free-text note describing the change. |
+
+<Note>
+Inside any AFTER trigger, SQL Server provides two special pseudo-tables: **`inserted`** holds the new row values for INSERT and UPDATE operations, and **`deleted`** holds the old row values for UPDATE and DELETE operations. Both can contain multiple rows when a single DML statement affects several rows, so always write trigger logic as set-based `SELECT … FROM inserted` rather than assuming a single row.
+</Note>
+
+<Warning>
+Triggers execute synchronously inside the same transaction as the originating DML statement. On high-volume tables such as `Venta_Producto` or `Movimiento_Inventario`, heavy trigger logic can noticeably degrade write throughput. Keep trigger bodies minimal — limit them to `INSERT INTO Bitacora … SELECT … FROM inserted` or simple `UPDATE` statements — and never use cursors, `WHILE` loops, or remote calls inside a trigger.
+</Warning>
+
+---
+
+## File Location
+
+All triggers belong in `sql/Triggers.sql`. Use `CREATE OR ALTER TRIGGER` (SQL Server 2017+) to make the file idempotent and safe to re-run:
+
+```sql
+USE MUNDO_ESCOLAR
+GO
+
+CREATE OR ALTER TRIGGER trg_Venta_Insert_Audit
+ON Venta
+AFTER INSERT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    -- trigger body ...
+END
+GO
+```

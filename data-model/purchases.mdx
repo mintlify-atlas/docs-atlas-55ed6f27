@@ -1,0 +1,170 @@
+---
+title: "Purchase Order Tables: Proveedor, Compra, and Compra_Producto"
+sidebarTitle: "Purchases"
+description: "Reference for the 3 purchase tables in Mundo Escolar — supplier records, purchase order headers, and itemized purchase detail lines."
+---
+
+The Purchases domain follows a classic normalized header-detail purchase order structure. A `Compra` row acts as the order header — recording which supplier, which user, and when the purchase was made. Each line item on that order is stored as a separate `Compra_Producto` row, linking a product to the order with its quantity, unit cost, and computed subtotal. The `Proveedor` table holds the complete supplier registry with legal identification and contact information.
+
+---
+
+## Proveedor
+
+Stores the registry of all suppliers that Mundo Escolar sources products from. Each supplier is uniquely identified by their `Cedula_Juridica` (corporate legal ID number).
+
+<ParamField path="Id_Proveedor" type="INT IDENTITY(1,1)" required>
+  Surrogate primary key. Auto-incremented by the database engine.
+</ParamField>
+
+<ParamField path="Cedula_Juridica" type="VARCHAR(50)" required>
+  The supplier's legal corporate tax ID number (Cédula Jurídica). Must be unique across all suppliers — enforced by `UQ_Proveedor_Cedula_Juridica`.
+</ParamField>
+
+<ParamField path="Nombre_Proveedor" type="VARCHAR(50)" required>
+  The legal or trade name of the supplier company (e.g., `Distribuidora Escolar CR S.A.`).
+</ParamField>
+
+<ParamField path="Nombre_Contacto" type="VARCHAR(50)" required>
+  Given name (first name) of the primary contact person at the supplier.
+</ParamField>
+
+<ParamField path="Apellido1_Contacto" type="VARCHAR(50)" required>
+  Paternal surname of the primary contact person.
+</ParamField>
+
+<ParamField path="Apellido2_Contacto" type="VARCHAR(50)" required>
+  Maternal surname of the primary contact person.
+</ParamField>
+
+<ParamField path="Correo" type="VARCHAR(150)" required>
+  Email address for the supplier contact. Used for purchase order communication.
+</ParamField>
+
+<ParamField path="Telefono" type="VARCHAR(50)" required>
+  Phone number for the supplier. Stored as `VARCHAR` to accommodate extensions and international formats.
+</ParamField>
+
+<ParamField path="Direccion" type="VARCHAR(200)" required>
+  Physical address of the supplier as free text.
+</ParamField>
+
+<ParamField path="Fecha_Registro" type="DATETIME" required>
+  Timestamp when the supplier was added to the system.
+</ParamField>
+
+<ParamField path="Estado" type="BOOL" required>
+  Active/inactive flag. `1` = supplier is active and available for new purchase orders, `0` = deactivated.
+</ParamField>
+
+<Note>
+  **Constraints:** `PK_Proveedor` on `Id_Proveedor` · `UQ_Proveedor_Cedula_Juridica` on `Cedula_Juridica`
+</Note>
+
+---
+
+## Compra
+
+The purchase order header. One `Compra` row represents a single procurement transaction with a specific supplier. It does not store line-item details — those live in `Compra_Producto`.
+
+<ParamField path="Id_Compra" type="INT IDENTITY(1,1)" required>
+  Surrogate primary key. Auto-incremented by the database engine.
+</ParamField>
+
+<ParamField path="Id_Proveedor" type="INT" required>
+  Foreign key referencing `Proveedor.Id_Proveedor`. Identifies which supplier this purchase order was placed with.
+</ParamField>
+
+<ParamField path="Id_Usuario" type="INT" required>
+  Foreign key referencing `Usuario.Id_Usuario`. Records which system user created or processed this purchase order.
+</ParamField>
+
+<ParamField path="Fecha_Compra" type="DATETIME" required>
+  Date and time the purchase order was created or received.
+</ParamField>
+
+<ParamField path="Estado" type="VARCHAR(50)" required>
+  Current status of the purchase order (e.g., `Pendiente`, `Recibida`, `Cancelada`). Stored as a free-text status string rather than a FK to a catalog table.
+</ParamField>
+
+<Note>
+  **Constraints:** `PK_Compra` on `Id_Compra`
+  **Foreign keys:** `FK_Compra_Proveedor` → `Proveedor(Id_Proveedor)` · `FK_Compra_Usuario` → `Usuario(Id_Usuario)`
+</Note>
+
+---
+
+## Compra_Producto
+
+The purchase order detail lines. Each row represents one product on a purchase order, with the negotiated unit cost, quantity ordered, and the computed subtotal for that line.
+
+<ParamField path="Id_Compra_Producto" type="INT IDENTITY(1,1)" required>
+  Surrogate primary key for the detail line. Auto-incremented.
+</ParamField>
+
+<ParamField path="Id_Compra" type="INT" required>
+  Foreign key referencing `Compra.Id_Compra`. Associates this detail line with its parent purchase order header.
+</ParamField>
+
+<ParamField path="Id_Producto" type="INT" required>
+  Foreign key referencing `Producto.Id_Producto`. Identifies which product was ordered on this line.
+</ParamField>
+
+<ParamField path="Cantidad" type="INT" required>
+  Number of units ordered for this product on this purchase order.
+</ParamField>
+
+<ParamField path="Costo_Unitario" type="DECIMAL(12,2)" required>
+  The negotiated purchase price per unit paid to the supplier for this order. Supports values up to 999,999,999,999.99.
+</ParamField>
+
+<ParamField path="Subtotal" type="DECIMAL(12,2)" required>
+  Pre-computed line total (`Cantidad × Costo_Unitario`). Stored explicitly for reporting performance. Supports values up to 999,999,999,999.99.
+</ParamField>
+
+<Note>
+  **Constraints:** `PK_Compra_Producto` on `Id_Compra_Producto`
+  **Foreign keys:** `FK_Compra_Producto_Compra` → `Compra(Id_Compra)` · `FK_Compra_Producto_Producto` → `Producto(Id_Producto)`
+</Note>
+
+---
+
+## Query Example
+
+Use this query to retrieve the full detail of all purchase orders, joining supplier names and product names from their respective tables:
+
+```sql
+-- Full purchase order detail
+SELECT
+    c.Id_Compra,
+    c.Fecha_Compra,
+    c.Estado,
+    pr.Nombre_Proveedor,
+    p.Nombre AS Producto,
+    cp.Cantidad,
+    cp.Costo_Unitario,
+    cp.Subtotal
+FROM Compra c
+INNER JOIN Proveedor pr ON c.Id_Proveedor = pr.Id_Proveedor
+INNER JOIN Compra_Producto cp ON c.Id_Compra = cp.Id_Compra
+INNER JOIN Producto p ON cp.Id_Producto = p.Id_Producto
+ORDER BY c.Fecha_Compra DESC;
+```
+
+<Tip>
+  To filter for a specific supplier, add `WHERE pr.Cedula_Juridica = '3-101-XXXXXX'` or `WHERE c.Id_Proveedor = @Id_Proveedor` to the query above.
+</Tip>
+
+---
+
+## Foreign-Key Relationships
+
+```
+Proveedor ──────────── Compra ──────────── Compra_Producto
+                          │                       │
+Usuario ──────────────────┘               Producto ───────┘
+```
+
+- `Compra.Id_Proveedor` → `Proveedor.Id_Proveedor)`
+- `Compra.Id_Usuario` → `Usuario.Id_Usuario`
+- `Compra_Producto.Id_Compra` → `Compra.Id_Compra`
+- `Compra_Producto.Id_Producto` → `Producto.Id_Producto`

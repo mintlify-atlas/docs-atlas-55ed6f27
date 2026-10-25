@@ -1,0 +1,219 @@
+---
+title: "Inventory Management: Categoria, Producto, and Movement Tables"
+sidebarTitle: "Inventory"
+description: "Reference for the 4 inventory tables in Mundo Escolar — product categories, product records with reorder points, movement types, and inventory movement logs."
+---
+
+The Inventory domain governs how Mundo Escolar organizes its merchandise and tracks stock levels over time. Products are organized under named categories, and every stock change — whether from a purchase, a sale, a manual adjustment, or a write-off — is recorded as a `Movimiento_Inventario` row that links back to a `Tipo_Movimiento` entry. This event-sourcing approach means a full audit trail of stock changes is always available, independent of the current `Stock_Actual` value stored on the `Producto` row.
+
+---
+
+## Categoria
+
+A catalog table that groups products into logical families (e.g., `Útiles Escolares`, `Libros de Texto`, `Arte y Manualidades`).
+
+<ParamField path="Id_Categoria" type="INT IDENTITY(1,1)" required>
+  Surrogate primary key. Auto-incremented by the database engine.
+</ParamField>
+
+<ParamField path="Nombre" type="VARCHAR(50)" required>
+  Display name for the category (e.g., `Cuadernos`, `Bolígrafos`, `Libros`).
+</ParamField>
+
+<ParamField path="Descripcion" type="VARCHAR(150)">
+  Optional description of which products belong to this category.
+</ParamField>
+
+<ParamField path="Estado" type="BOOL" required>
+  Active/inactive flag. `1` = category is visible and available for product assignment, `0` = archived.
+</ParamField>
+
+<Note>
+  **Constraints:** `PK_Categoria` on `Id_Categoria`
+</Note>
+
+---
+
+## Producto
+
+The core product catalog. Each row represents one SKU stocked and sold by Mundo Escolar. The product belongs to one category and carries its current stock level and a reorder threshold.
+
+<ParamField path="Id_Producto" type="INT IDENTITY(1,1)" required>
+  Surrogate primary key. Auto-incremented by the database engine.
+</ParamField>
+
+<ParamField path="Id_Categoria" type="INT" required>
+  Foreign key referencing `Categoria.Id_Categoria`. Every product must belong to exactly one category.
+</ParamField>
+
+<ParamField path="Nombre" type="VARCHAR(100)" required>
+  Product name as displayed in the POS and reports (e.g., `Cuaderno Universitario 100 hojas`, `Bolígrafo Azul BIC`).
+</ParamField>
+
+<ParamField path="Descripcion" type="VARCHAR(200)">
+  Optional extended description of the product including brand, specifications, or packaging details.
+</ParamField>
+
+<ParamField path="Precio_Venta" type="DECIMAL(12,2)" required>
+  The standard retail selling price of the product in local currency. Stored with two decimal places of precision.
+</ParamField>
+
+<ParamField path="Stock_Actual" type="VARCHAR(50)" required>
+  Current quantity on hand. **Stored as `VARCHAR(50)`, not a numeric type.** Numeric comparisons require an explicit `CAST` or `CONVERT` — see the warning below.
+</ParamField>
+
+<ParamField path="Punto_Reorden" type="INT" required>
+  Reorder threshold. When `CAST(Stock_Actual AS INT)` falls at or below this value, a purchase order should be generated to replenish stock.
+</ParamField>
+
+<ParamField path="Estado" type="BOOL" required>
+  Active/inactive flag. `1` = product is available for sale, `0` = discontinued or hidden from POS.
+</ParamField>
+
+<Note>
+  **Constraints:** `PK_Producto` on `Id_Producto` · `FK_Producto_Categoria` → `Categoria(Id_Categoria)`
+</Note>
+
+<Warning>
+  `Stock_Actual` is defined as `VARCHAR(50)`, not `INT` or `DECIMAL`. Any query that compares stock levels numerically (e.g., finding products below reorder point) **must** use `CAST` or `CONVERT` to avoid implicit conversion errors or incorrect string-based comparisons:
+
+  ```sql
+  -- Correct: numeric comparison using CAST
+  WHERE CAST(p.Stock_Actual AS INT) <= p.Punto_Reorden
+
+  -- Incorrect: string comparison — '9' > '10' alphabetically
+  WHERE p.Stock_Actual <= p.Punto_Reorden
+  ```
+</Warning>
+
+---
+
+## Tipo_Movimiento
+
+A catalog table that classifies the kinds of inventory events that can occur. The `Naturaleza` field distinguishes whether a movement type adds stock (entry) or removes it (exit), allowing the system to apply the correct sign when updating `Stock_Actual`.
+
+<ParamField path="Id_Tipo_Movimiento" type="INT IDENTITY(1,1)" required>
+  Surrogate primary key. Auto-incremented by the database engine.
+</ParamField>
+
+<ParamField path="Nombre" type="VARCHAR(50)" required>
+  Short label for this movement type (e.g., `Compra`, `Venta`, `Ajuste`, `Devolución`, `Merma`).
+</ParamField>
+
+<ParamField path="Naturaleza" type="VARCHAR(20)" required>
+  Classifies the movement direction. Typical values are `ENTRADA` (stock increases) or `SALIDA` (stock decreases). The application layer uses this field to determine whether to add or subtract from `Stock_Actual`.
+</ParamField>
+
+<ParamField path="Estado" type="BOOL" required>
+  Active/inactive flag. `1` = this movement type can be selected in new movements, `0` = archived.
+</ParamField>
+
+<ParamField path="Descripcion" type="VARCHAR(255)">
+  Optional explanation of when this movement type is used and any business rules that apply.
+</ParamField>
+
+<Note>
+  **Constraints:** `PK_Tipo_Movimiento` on `Id_Tipo_Movimiento`
+</Note>
+
+---
+
+## Movimiento_Inventario
+
+The inventory event log. Every stock change — from purchase receipts to sales shipments to manual adjustments — is recorded here. This table forms the complete audit trail for all stock-level changes.
+
+<ParamField path="Id_Movimiento_Inventario" type="INT IDENTITY(1,1)" required>
+  Surrogate primary key. Auto-incremented for each movement event.
+</ParamField>
+
+<ParamField path="Id_Producto" type="INT" required>
+  Foreign key referencing `Producto.Id_Producto`. Identifies which product's stock was affected.
+</ParamField>
+
+<ParamField path="Id_Tipo_Movimiento" type="INT" required>
+  Foreign key referencing `Tipo_Movimiento.Id_Tipo_Movimiento`. Specifies the kind of event (entry or exit) that generated this movement.
+</ParamField>
+
+<ParamField path="Id_Usuario" type="INT" required>
+  Foreign key referencing `Usuario.Id_Usuario`. The system user who registered this movement.
+</ParamField>
+
+<ParamField path="Cantidad" type="INT" required>
+  Number of units involved in the movement. Always stored as a positive integer; direction (add/subtract) is determined by `Tipo_Movimiento.Naturaleza`.
+</ParamField>
+
+<ParamField path="Fecha" type="DATETIME" required>
+  Date and time the movement was recorded.
+</ParamField>
+
+<ParamField path="Motivo" type="VARCHAR(150)" required>
+  Mandatory description explaining why this movement occurred (e.g., `Recepción OC-2024-0042`, `Venta #1058`, `Ajuste físico anual`).
+</ParamField>
+
+<Note>
+  **Constraints:** `PK_Movimiento_Inventario` on `Id_Movimiento_Inventario`
+  **Foreign keys:** `FK_Movimiento_Inventario_Producto` → `Producto(Id_Producto)` · `FK_Movimiento_Inventario_Tipo_Movimiento` → `Tipo_Movimiento(Id_Tipo_Movimiento)` · `FK_Movimiento_Inventario_Usuario` → `Usuario(Id_Usuario)`
+</Note>
+
+---
+
+## Inventory Movements
+
+The `Tipo_Movimiento.Naturaleza` field (`VARCHAR(20)`) is the pivot that determines how each movement affects stock levels. Common values and their effect:
+
+| Naturaleza | Example Movement Types | Stock Effect |
+|---|---|---|
+| `ENTRADA` | `Compra`, `Devolución de cliente`, `Ajuste positivo` | Increases `Stock_Actual` |
+| `SALIDA` | `Venta`, `Devolución a proveedor`, `Merma`, `Ajuste negativo` | Decreases `Stock_Actual` |
+
+The application layer should always read `Naturaleza` from `Tipo_Movimiento` before applying a movement quantity to `Stock_Actual` on the `Producto` row.
+
+### Current Stock Query
+
+```sql
+-- View current stock for all active products
+SELECT 
+    p.Id_Producto,
+    p.Nombre,
+    p.Stock_Actual,
+    p.Punto_Reorden,
+    c.Nombre AS Categoria
+FROM Producto p
+INNER JOIN Categoria c ON p.Id_Categoria = c.Id_Categoria
+WHERE p.Estado = 1
+ORDER BY p.Nombre;
+```
+
+### Products Below Reorder Point
+
+```sql
+-- Products at or below their reorder threshold (requires CAST due to VARCHAR stock)
+SELECT
+    p.Id_Producto,
+    p.Nombre,
+    p.Stock_Actual,
+    p.Punto_Reorden,
+    c.Nombre AS Categoria
+FROM Producto p
+INNER JOIN Categoria c ON p.Id_Categoria = c.Id_Categoria
+WHERE p.Estado = 1
+  AND CAST(p.Stock_Actual AS INT) <= p.Punto_Reorden
+ORDER BY CAST(p.Stock_Actual AS INT) ASC;
+```
+
+---
+
+## Foreign-Key Relationships
+
+```
+Categoria ──────────── Producto ──────────── Movimiento_Inventario
+                                                      │
+Tipo_Movimiento ──────────────────────────────────────┤
+                                                      │
+Usuario ───────────────────────────────────────────────┘
+```
+
+- `Producto.Id_Categoria` → `Categoria.Id_Categoria`
+- `Movimiento_Inventario.Id_Producto` → `Producto.Id_Producto`
+- `Movimiento_Inventario.Id_Tipo_Movimiento` → `Tipo_Movimiento.Id_Tipo_Movimiento)`
+- `Movimiento_Inventario.Id_Usuario` → `Usuario.Id_Usuario`

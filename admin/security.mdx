@@ -1,0 +1,132 @@
+---
+title: "SQL Server Security Configuration for Mundo Escolar"
+sidebarTitle: "Security"
+description: "Configure SQL Server logins, database users, roles, and object-level permissions for the Mundo Escolar database using the Seguridad.sql script."
+---
+
+`Seguridad.sql` is the designated file for all SQL Server-level security configuration in MUNDO_ESCOLAR — logins, database users, role definitions, GRANT/DENY statements, and role membership assignments. The file is currently a stub containing only the `USE MUNDO_ESCOLAR` context switch and is ready for implementation. Centralizing every permission statement in this single file makes it straightforward to audit, version-control, and re-apply the security baseline to any environment (development, staging, production).
+
+<Warning>
+Never use the `sa` account for application connections. The `sa` login has unrestricted server-level access and should be reserved for emergency DBA operations only. Always create a dedicated, low-privilege SQL Server login for each application role and grant only the permissions that role requires.
+</Warning>
+
+---
+
+## Application Roles
+
+The MUNDO_ESCOLAR schema includes a `Rol` table that defines the application-layer roles assigned to each `Usuario`. The SQL Server database roles below mirror those application roles and should be created in `Seguridad.sql` to enforce least-privilege access at the database engine level.
+
+### `rol_admin`
+
+Full access to all tables, views, and stored procedures in MUNDO_ESCOLAR. Suitable only for DBA and senior developer accounts. Grant `CONTROL` on the database or `db_owner` membership.
+
+### `rol_vendedor`
+
+Covers point-of-sale operations. The role needs read and write access to the tables involved in recording a sale.
+
+| Table | Permissions |
+|---|---|
+| `Venta` | `SELECT`, `INSERT` |
+| `Venta_Producto` | `SELECT`, `INSERT` |
+| `Venta_Servicio` | `SELECT`, `INSERT` |
+| `Cliente` | `SELECT` |
+| `Producto` | `SELECT` (to look up prices and availability) |
+| `Servicio` | `SELECT` |
+
+### `rol_bodega`
+
+Covers warehouse and purchasing operations. The role needs full inventory control access.
+
+| Table | Permissions |
+|---|---|
+| `Producto` | `SELECT`, `INSERT`, `UPDATE` |
+| `Movimiento_Inventario` | `SELECT`, `INSERT` |
+| `Compra` | `SELECT`, `INSERT` |
+| `Compra_Producto` | `SELECT`, `INSERT` |
+| `Proveedor` | `SELECT` |
+| `Categoria` | `SELECT` |
+
+### `rol_contabilidad`
+
+Covers billing and payment review. The role has read-only access to financial records, plus the ability to register payments.
+
+| Table | Permissions |
+|---|---|
+| `Factura` | `SELECT` |
+| `Estado_Factura` | `SELECT` |
+| `Pago` | `SELECT`, `INSERT` |
+| `Metodo_Pago` | `SELECT` |
+| `Venta` | `SELECT` |
+| `Cliente` | `SELECT` |
+
+---
+
+## Implementation Pattern
+
+The script below shows the recommended sequence: create the SQL Server login at the server level, map it to a database user, define the role, grant object-level permissions to the role, and finally assign the user to the role. Run this inside `sql/Seguridad.sql`.
+
+```sql
+-- Create SQL Server login
+CREATE LOGIN vendedor_app WITH PASSWORD = 'StrongP@ssword1';
+GO
+
+-- Create database user mapped to login
+USE MUNDO_ESCOLAR;
+CREATE USER vendedor_app FOR LOGIN vendedor_app;
+GO
+
+-- Create role and grant permissions
+CREATE ROLE rol_vendedor;
+GO
+
+GRANT SELECT, INSERT ON Venta          TO rol_vendedor;
+GRANT SELECT, INSERT ON Venta_Producto TO rol_vendedor;
+GRANT SELECT, INSERT ON Venta_Servicio TO rol_vendedor;
+GRANT SELECT          ON Cliente       TO rol_vendedor;
+GO
+
+-- Assign user to role
+EXEC sp_addrolemember 'rol_vendedor', 'vendedor_app';
+GO
+```
+
+Repeat the pattern for `rol_bodega` and `rol_contabilidad`, adjusting the table list and permission verbs as described in the [Application Roles](#application-roles) section above.
+
+<Tip>
+For internal tools and scheduled SQL Server Agent jobs running on the same Windows domain, prefer Windows Authentication logins (`CREATE LOGIN [DOMAIN\ServiceAccount] FROM WINDOWS`) instead of SQL Authentication. Windows Authentication avoids storing passwords inside the database and benefits from Active Directory password policies and group management.
+</Tip>
+
+---
+
+## Notes on `Estructura.sql`
+
+`Estructura.sql` already applies `ALTER AUTHORIZATION ON DATABASE::MUNDO_ESCOLAR TO sa` immediately after database creation. This assignment is required to prevent Error 15404 when creating or viewing database diagrams in SQL Server Management Studio (SSMS). It does **not** grant `sa` any application access — it only sets the database owner metadata. All application-level access must still be configured through the roles and users defined in `Seguridad.sql`.
+
+---
+
+## Stored Procedure Permissions
+
+Once stored procedures are created in `Procedimientos_Almacenados.sql`, grant `EXECUTE` permission on each procedure to the appropriate role rather than granting table permissions directly where possible. This limits surface area — a `rol_vendedor` user can call `sp_RegistrarVenta` without needing direct `INSERT` on the underlying tables:
+
+```sql
+-- Grant execute on stored procedures instead of direct table access
+GRANT EXECUTE ON sp_RegistrarVenta  TO rol_vendedor;
+GRANT EXECUTE ON sp_AnularVenta     TO rol_vendedor;
+GO
+```
+
+When stored procedures own their data access (ownership chaining), SQL Server does not check table-level permissions for the calling user, simplifying the permission model further.
+
+---
+
+## Denying Dangerous Operations
+
+Explicitly deny permissions that must never be used by application roles, regardless of inherited rights:
+
+```sql
+-- Prevent application roles from dropping or altering tables
+DENY ALTER  ON SCHEMA::dbo TO rol_vendedor;
+DENY DROP   ON SCHEMA::dbo TO rol_vendedor;
+DENY CONTROL ON DATABASE::MUNDO_ESCOLAR TO rol_vendedor;
+GO
+```

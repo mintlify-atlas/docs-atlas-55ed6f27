@@ -1,0 +1,207 @@
+---
+title: "Sales Transactions: Venta, Products, and Services"
+sidebarTitle: "Sales"
+description: "Reference for the 4 sales tables in Mundo Escolar — sale headers, product line items, service line items, and the Servicio catalog."
+---
+
+The Sales domain records every customer transaction processed at Mundo Escolar. A `Venta` row is the sale header — it identifies the customer, the cashier, the date, and the monetary totals (subtotal, tax, and grand total). Because the store sells both physical merchandise and services (e.g., laminating, binding), the line items are split across two separate detail tables: `Venta_Producto` for product lines and `Venta_Servicio` for service lines. The `Servicio` catalog defines the available services and their base prices.
+
+---
+
+## Servicio
+
+A catalog of services offered by Mundo Escolar beyond physical product sales. Each row defines one service type with its standard base price.
+
+<ParamField path="Id_Servicio" type="INT IDENTITY(1,1)" required>
+  Surrogate primary key. Auto-incremented by the database engine.
+</ParamField>
+
+<ParamField path="Nombre" type="VARCHAR(50)" required>
+  Display name of the service (e.g., `Plastificado`, `Empaste`, `Impresión`, `Fotocopiado`).
+</ParamField>
+
+<ParamField path="Descripcion" type="VARCHAR(150)">
+  Optional description of the service including any applicable conditions or formats.
+</ParamField>
+
+<ParamField path="Precio_Base" type="DECIMAL(12,2)" required>
+  Standard unit price for one instance of this service. The actual price per sale line is captured in `Venta_Servicio.Precio_Unitario`, which may differ from this base if discounts or custom pricing apply.
+</ParamField>
+
+<ParamField path="Estado" type="BOOL" required>
+  Active/inactive flag. `1` = service is available for sale, `0` = discontinued.
+</ParamField>
+
+<Note>
+  **Constraints:** `PK_Servicio` on `Id_Servicio`
+</Note>
+
+---
+
+## Venta
+
+The sale header. One `Venta` row represents a single complete sales transaction. It does not store individual line items — those are distributed across `Venta_Producto` and `Venta_Servicio`.
+
+<ParamField path="Id_Venta" type="INT IDENTITY(1,1)" required>
+  Surrogate primary key. Auto-incremented by the database engine.
+</ParamField>
+
+<ParamField path="Id_Cliente" type="INT" required>
+  Foreign key referencing `Cliente.Id_Cliente`. The customer who made this purchase.
+</ParamField>
+
+<ParamField path="Id_Usuario" type="INT" required>
+  Foreign key referencing `Usuario.Id_Usuario`. The cashier or staff member who processed this sale.
+</ParamField>
+
+<ParamField path="Fecha" type="DATETIME" required>
+  Date and time the sale was completed.
+</ParamField>
+
+<ParamField path="Subtotal" type="DECIMAL(12,2)" required>
+  Sum of all line-item subtotals before tax is applied. Supports values up to 999,999,999,999.99.
+</ParamField>
+
+<ParamField path="Impuesto" type="DECIMAL(12,2)" required>
+  Total tax amount applied to the sale (e.g., VAT / IVA). Stored as a monetary amount, not a percentage.
+</ParamField>
+
+<ParamField path="Monto_Total" type="DECIMAL(12,2)" required>
+  Final amount due from the customer (`Subtotal + Impuesto`). This value is carried forward when a `Factura` is generated for this sale.
+</ParamField>
+
+<ParamField path="Estado" type="VARCHAR(50)" required>
+  Current status of the sale (e.g., `Completada`, `Anulada`, `Pendiente`). Stored as a free-text status string.
+</ParamField>
+
+<Note>
+  **Constraints:** `PK_Venta` on `Id_Venta`
+  **Foreign keys:** `FK_Venta_Cliente` → `Cliente(Id_Cliente)` · `FK_Venta_Usuario` → `Usuario(Id_Usuario)`
+</Note>
+
+---
+
+## Venta_Producto
+
+Product line items for a sale. Each row represents one product included in a `Venta`, with the quantity sold and the computed subtotal for that line.
+
+<ParamField path="Id_Venta_Producto" type="INT IDENTITY(1,1)" required>
+  Surrogate primary key for the product line. Auto-incremented.
+</ParamField>
+
+<ParamField path="Id_Producto" type="INT" required>
+  Foreign key referencing `Producto.Id_Producto`. Identifies which product was sold on this line.
+</ParamField>
+
+<ParamField path="Id_Venta" type="INT" required>
+  Foreign key referencing `Venta.Id_Venta`. Associates this line item with its parent sale header.
+</ParamField>
+
+<ParamField path="Cantidad" type="VARCHAR(50)" required>
+  Number of units sold on this line. **Stored as `VARCHAR(50)`, not a numeric type.** Arithmetic or comparisons require `CAST` or `CONVERT`.
+</ParamField>
+
+<ParamField path="Subtotal" type="VARCHAR(50)" required>
+  Pre-computed line total for this product line (`Cantidad × unit price`). **Also stored as `VARCHAR(50)`.** Use `CAST(Subtotal AS DECIMAL(12,2))` for any monetary calculations.
+</ParamField>
+
+<ParamField path="Estado" type="BOOL" required>
+  Active/inactive flag for this line item. `1` = active, `0` = cancelled/voided line.
+</ParamField>
+
+<Note>
+  **Constraints:** `PK_Venta_Producto` on `Id_Venta_Producto`
+  **Foreign keys:** `FK_Venta_Producto_Producto` → `Producto(Id_Producto)` · `FK_Venta_Producto_Venta` → `Venta(Id_Venta)`
+</Note>
+
+<Note>
+  `Venta_Producto.Cantidad` and `Venta_Producto.Subtotal` are both `VARCHAR(50)` columns, unlike the equivalent columns in `Compra_Producto` which are typed as `INT` and `DECIMAL(12,2)` respectively. Any query performing arithmetic on these fields **must** use `CAST` or `CONVERT`:
+
+  ```sql
+  -- Correct: CAST before summing Venta_Producto subtotals
+  SELECT
+      vp.Id_Venta,
+      SUM(CAST(vp.Subtotal AS DECIMAL(12,2))) AS Total_Productos
+  FROM Venta_Producto vp
+  WHERE vp.Estado = 1
+  GROUP BY vp.Id_Venta;
+  ```
+</Note>
+
+---
+
+## Venta_Servicio
+
+Service line items for a sale. Each row represents one service performed as part of a `Venta`, with the unit price negotiated at the time of sale and the computed subtotal.
+
+<ParamField path="Id_Venta_Servicio" type="INT IDENTITY(1,1)" required>
+  Surrogate primary key for the service line. Auto-incremented.
+</ParamField>
+
+<ParamField path="Id_Venta" type="INT" required>
+  Foreign key referencing `Venta.Id_Venta`. Associates this service line with its parent sale header.
+</ParamField>
+
+<ParamField path="Id_Servicio" type="INT" required>
+  Foreign key referencing `Servicio.Id_Servicio`. Identifies which service was provided.
+</ParamField>
+
+<ParamField path="Cantidad" type="INT" required>
+  Number of units of the service provided (e.g., number of pages laminated, number of copies printed).
+</ParamField>
+
+<ParamField path="Precio_Unitario" type="DECIMAL(12,2)" required>
+  The actual price per unit charged at the time of the sale. May differ from `Servicio.Precio_Base` if a discount was applied.
+</ParamField>
+
+<ParamField path="Subtotal" type="DECIMAL(12,2)" required>
+  Pre-computed line total (`Cantidad × Precio_Unitario`).
+</ParamField>
+
+<Note>
+  **Constraints:** `PK_Venta_Servicio` on `Id_Venta_Servicio`
+  **Foreign keys:** `FK_Venta_Servicio_Venta` → `Venta(Id_Venta)` · `FK_Venta_Servicio_Servicio` → `Servicio(Id_Servicio)`
+</Note>
+
+---
+
+## Query Example
+
+Use this query to retrieve a full sales summary with customer name and monetary totals, sorted by most recent sale first:
+
+```sql
+-- Sales summary with customer and totals
+SELECT
+    v.Id_Venta,
+    v.Fecha,
+    c.Nombre + ' ' + c.Apellido1 AS Cliente,
+    v.Subtotal,
+    v.Impuesto,
+    v.Monto_Total,
+    v.Estado
+FROM Venta v
+INNER JOIN Cliente c ON v.Id_Cliente = c.Id_Cliente
+ORDER BY v.Fecha DESC;
+```
+
+<Tip>
+  To retrieve all line items (products and services) for a specific sale, join both `Venta_Producto` and `Venta_Servicio` to the `Venta` row using `Id_Venta`. Use `CAST(vp.Subtotal AS DECIMAL(12,2))` when summing product subtotals.
+</Tip>
+
+---
+
+## Foreign-Key Relationships
+
+```
+Cliente ──────────────────┐
+                           ├── Venta ──── Venta_Producto ──── Producto
+Usuario ──────────────────┘      │
+                                  └── Venta_Servicio ──── Servicio
+```
+
+- `Venta.Id_Cliente` → `Cliente.Id_Cliente`
+- `Venta.Id_Usuario` → `Usuario.Id_Usuario`
+- `Venta_Producto.Id_Venta` → `Venta.Id_Venta`
+- `Venta_Producto.Id_Producto` → `Producto.Id_Producto`
+- `Venta_Servicio.Id_Venta` → `Venta.Id_Venta`
+- `Venta_Servicio.Id_Servicio` → `Servicio.Id_Servicio`

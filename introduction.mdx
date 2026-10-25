@@ -1,0 +1,83 @@
+---
+title: "Mundo Escolar: SQL Server Database for School Bookstores"
+sidebarTitle: "Introduction"
+description: "Learn what Mundo Escolar is, how it's organized across business domains, and the technology decisions behind its normalized SQL Server 2022 schema."
+---
+
+Mundo Escolar is a fully normalized relational database built on SQL Server 2022 for **Librería y Papelería Mundo Escolar** — a school bookstore and stationery shop. It manages every operational layer of the business: who can log in and what they can do, which customers are on file, what products and services are stocked, how goods are purchased from suppliers, and how sales are invoiced and collected. The schema is designed for clarity and extensibility, mapping directly from a formal Entity-Relationship Model (MER) to production-ready T-SQL tables.
+
+## Project Overview
+
+Mundo Escolar is a university case study developed during the **II Semester 2026, Group \#1**. The goal is to implement a complete, production-grade relational database for a real-world school bookstore scenario — from user authentication and role-based access control all the way through billing and payment reconciliation.
+
+The database contains **24 tables** organized across **5 business domains**. Every table is created with explicit primary key constraints, all relationships are enforced through foreign keys, and uniqueness is guaranteed on natural identifiers such as user email addresses, client IDs, and supplier tax numbers.
+
+## Business Domains
+
+<CardGroup cols={2}>
+  <Card title="Security & Users" icon="shield-halved" href="/data-model/security">
+    Manages system users, roles, permissions, role assignments, and an audit log (Bitácora) that tracks every action performed inside the database.
+  </Card>
+  <Card title="Clients" icon="users" href="/data-model/clients">
+    Stores customer profiles with client types, payment conditions, and institutional affiliations — supporting both individual and organizational buyers.
+  </Card>
+  <Card title="Inventory" icon="boxes-stacked" href="/data-model/inventory">
+    Tracks product categories, product catalog with reorder points, services offered, and a full inventory-movement log with debit/credit movement types.
+  </Card>
+  <Card title="Purchases" icon="truck" href="/data-model/purchases">
+    Records supplier information and normalized purchase orders (header + line-item detail) that automatically feed stock levels through inventory movements.
+  </Card>
+  <Card title="Sales & Billing" icon="receipt" href="/data-model/billing">
+    Covers the complete sales cycle: sales orders, product and service line items, invoice generation with status tracking, payment methods, and payment records.
+  </Card>
+</CardGroup>
+
+## Technology Stack
+
+| Component | Detail |
+|---|---|
+| **Database Engine** | Microsoft SQL Server 2022 |
+| **Query Language** | T-SQL (Transact-SQL) |
+| **Compatibility** | SQL Server 2022 (v16) |
+| **Custom Type** | `BOOL` alias type (created from `BIT`) |
+| **Collation** | Server default (Latin1_General recommended for Spanish content) |
+| **Authorization** | Database owner set to `sa` to prevent Error 15404 in SSMS diagrams |
+
+### The `BOOL` Alias Type
+
+A custom alias type named `BOOL` is created from the native `BIT` data type early in the setup script:
+
+```sql
+CREATE TYPE BOOL FROM BIT
+```
+
+This type is used throughout the schema on every `Estado` (status) column and other boolean flags. It exists purely for **MER compatibility** — the logical data model uses `BOOL` as a first-class type, and the alias keeps the physical schema in exact correspondence with the design diagrams without introducing any runtime overhead.
+
+## Repository Structure
+
+The project SQL layer is split into seven focused files, each handling a distinct phase of the database lifecycle:
+
+| File | Purpose |
+|---|---|
+| `Estructura.sql` | Creates the database, configures data/log files, defines all 24 tables, foreign keys, and unique constraints |
+| `Inserciones.sql` | Populates all reference and transactional tables with seed and sample data |
+| `Procedimientos_Almacenados.sql` | Defines stored procedures for the main business operations (CRUD, lookups, business logic) |
+| `Triggers.sql` | Implements database triggers for automatic inventory updates, audit logging, and data integrity enforcement |
+| `Reportes.sql` | Contains pre-built reporting queries for sales summaries, inventory status, and billing reconciliation |
+| `Seguridad.sql` | Configures SQL Server logins, database users, and role-based permission grants |
+| `Mantenimiento_Backups.sql` | Defines backup strategies, maintenance plans, and index rebuild/reorganize jobs |
+
+## Database Sizing
+
+The database is provisioned with generous initial allocations and controlled auto-growth to avoid fragmentation under typical bookstore workloads:
+
+| File | Initial Size | Maximum Size | Auto-Growth |
+|---|---|---|---|
+| **Data file** (`MUNDO_ESCOLAR_data.mdf`) | 3 GB | 20 GB | 1 GB |
+| **Log file** (`MUNDO_ESCOLAR_log.ldf`) | 1 GB | 5 GB | 512 MB |
+
+These values are defined at the top of `Estructura.sql` inside the `CREATE DATABASE` statement and can be adjusted before first deployment to match the available disk capacity of the target server.
+
+<Note>
+  The `FILENAME` paths in `Estructura.sql` are hardcoded to `C:\SQLData\MUNDO_ESCOLAR_data.mdf` and `C:\SQLLog\MUNDO_ESCOLAR_log.ldf`. These directories **must exist** on the SQL Server host before the script is executed, or the `CREATE DATABASE` statement will fail. If your server uses different drive letters or directory layouts, update both `FILENAME` values accordingly before running the script.
+</Note>

@@ -1,0 +1,194 @@
+---
+title: "Billing & Payments: Factura, Pago, and Payment Methods"
+sidebarTitle: "Billing"
+description: "Reference for the 4 billing tables in Mundo Escolar — invoice records, payment entries, invoice status catalog, and payment method catalog."
+---
+
+The Billing domain manages the full post-sale financial lifecycle. Once a `Venta` is completed, a `Factura` (invoice) is created from it, inheriting the grand total as the `Monto_Total` and seeding `Saldo_Pendiente` with the same value. As the customer makes payments, one or more `Pago` rows are recorded — each referencing a configured `Metodo_Pago` — and the `Saldo_Pendiente` on the `Factura` is reduced accordingly. The `Estado_Factura` catalog tracks where each invoice stands in its lifecycle (e.g., pending, partially paid, fully paid, overdue).
+
+---
+
+## Estado_Factura
+
+A catalog table that defines the possible lifecycle states for an invoice. This table is intentionally minimal — just an ID and a name — to allow flexible status management without schema changes.
+
+<ParamField path="Id_Estado_Factura" type="INT IDENTITY(1,1)" required>
+  Surrogate primary key. Auto-incremented by the database engine.
+</ParamField>
+
+<ParamField path="Nombre_Estado" type="VARCHAR(50)" required>
+  Display name of the invoice state (e.g., `Pendiente`, `Pagada`, `Vencida`, `Anulada`, `Pago Parcial`).
+</ParamField>
+
+<Note>
+  **Constraints:** `PK_Estado_Factura` on `Id_Estado_Factura`
+</Note>
+
+---
+
+## Factura
+
+The invoice record. Each `Factura` is derived from one `Venta` and tracks the total amount owed and the remaining unpaid balance. The invoice's status is managed through the `Id_Estado_Factura` foreign key.
+
+<ParamField path="Id_Factura" type="INT IDENTITY(1,1)" required>
+  Surrogate primary key. Auto-incremented by the database engine.
+</ParamField>
+
+<ParamField path="Id_Venta" type="INT" required>
+  Foreign key referencing `Venta.Id_Venta`. The sale transaction that originated this invoice. Each sale maps to one invoice.
+</ParamField>
+
+<ParamField path="Id_Usuario" type="INT" required>
+  Foreign key referencing `Usuario.Id_Usuario`. The system user who issued this invoice.
+</ParamField>
+
+<ParamField path="Id_Estado_Factura" type="INT" required>
+  Foreign key referencing `Estado_Factura.Id_Estado_Factura`. The current status of this invoice (e.g., `Pendiente`, `Pagada`).
+</ParamField>
+
+<ParamField path="Fecha_Emision" type="DATETIME" required>
+  The date and time the invoice was issued. Typically matches or follows the `Venta.Fecha`.
+</ParamField>
+
+<ParamField path="Fecha_Vencimiento" type="DATETIME" required>
+  The date by which full payment is due. Calculated as `Fecha_Emision + Dias_Credito` from the customer's `Condicion_Pago`. For cash customers this is typically the same day as `Fecha_Emision`.
+</ParamField>
+
+<ParamField path="Monto_Total" type="DECIMAL(12,2)" required>
+  The total amount of the invoice, copied from `Venta.Monto_Total` at the time of invoice creation. Stored with two decimal places of precision.
+</ParamField>
+
+<ParamField path="Saldo_Pendiente" type="DECIMAL(12,2)" required>
+  The remaining unpaid balance on this invoice. Initialized to `Monto_Total` when the invoice is created, and reduced with each `Pago` record. When `Saldo_Pendiente = 0`, the invoice is considered fully paid and its status should be updated to `Pagada`.
+</ParamField>
+
+<Note>
+  **Constraints:** `PK_Factura` on `Id_Factura`
+  **Foreign keys:** `FK_Factura_Venta` → `Venta(Id_Venta)` · `FK_Factura_Usuario` → `Usuario(Id_Usuario)` · `FK_Factura_Estado_Factura` → `Estado_Factura(Id_Estado_Factura)`
+</Note>
+
+---
+
+## Metodo_Pago
+
+A catalog of accepted payment methods. Each payment recorded in `Pago` must reference one of the active methods defined here.
+
+<ParamField path="Id_Metodo_Pago" type="INT IDENTITY(1,1)" required>
+  Surrogate primary key. Auto-incremented by the database engine.
+</ParamField>
+
+<ParamField path="Nombre" type="VARCHAR(50)" required>
+  Display name of the payment method (e.g., `Efectivo`, `Tarjeta de Débito`, `Tarjeta de Crédito`, `Transferencia SINPE`).
+</ParamField>
+
+<ParamField path="Descripcion" type="VARCHAR(150)">
+  Optional description with any applicable conditions or processing notes (e.g., surcharge policies, required confirmation steps).
+</ParamField>
+
+<ParamField path="Estado" type="BOOL" required>
+  Active/inactive flag. `1` = method is available for use in new payments, `0` = deactivated.
+</ParamField>
+
+<Note>
+  **Constraints:** `PK_Metodo_Pago` on `Id_Metodo_Pago`
+</Note>
+
+---
+
+## Pago
+
+Records each individual payment applied against an invoice. A single invoice may receive multiple partial payments over time, each stored as a separate `Pago` row. The sum of all `Monto_Pagado` values for a given `Id_Factura` should equal `Factura.Monto_Total` when the invoice is fully settled.
+
+<ParamField path="Id_Pago" type="INT IDENTITY(1,1)" required>
+  Surrogate primary key. Auto-incremented by the database engine.
+</ParamField>
+
+<ParamField path="Id_Factura" type="INT" required>
+  Foreign key referencing `Factura.Id_Factura`. The invoice this payment is being applied to.
+</ParamField>
+
+<ParamField path="Id_Metodo_Pago" type="INT" required>
+  Foreign key referencing `Metodo_Pago.Id_Metodo_Pago`. The payment method used for this transaction (e.g., cash, debit card, SINPE transfer).
+</ParamField>
+
+<ParamField path="Fecha_Pago" type="DATETIME" required>
+  Date and time the payment was received and registered in the system.
+</ParamField>
+
+<ParamField path="Monto_Pagado" type="DECIMAL(12,2)" required>
+  The monetary amount received in this payment. Must not exceed the remaining `Factura.Saldo_Pendiente` at the time of recording. Supports values up to 999,999,999,999.99.
+</ParamField>
+
+<ParamField path="Numero_Referencia" type="INT" required>
+  Reference number for the payment transaction. For cash payments this is typically a sequential receipt number; for card/transfer payments it should store the external authorization or confirmation number. **Note:** stored as `INT`, so only numeric reference numbers are supported.
+</ParamField>
+
+<ParamField path="Estado" type="BOOL" required>
+  Active/inactive flag for this payment record. `1` = payment is valid and counted, `0` = reversed or voided.
+</ParamField>
+
+<Note>
+  **Constraints:** `PK_Pago` on `Id_Pago`
+  **Foreign keys:** `FK_Pago_Factura` → `Factura(Id_Factura)` · `FK_Pago_Metodo_Pago` → `Metodo_Pago(Id_Metodo_Pago)`
+</Note>
+
+---
+
+## Query Example
+
+Use this query to retrieve all invoices that still carry an outstanding balance, ordered by the nearest due date first — useful for collections follow-up:
+
+```sql
+-- Invoices with outstanding balance
+SELECT
+    f.Id_Factura,
+    f.Fecha_Emision,
+    f.Fecha_Vencimiento,
+    f.Monto_Total,
+    f.Saldo_Pendiente,
+    ef.Nombre_Estado
+FROM Factura f
+INNER JOIN Estado_Factura ef ON f.Id_Estado_Factura = ef.Id_Estado_Factura
+WHERE f.Saldo_Pendiente > 0
+ORDER BY f.Fecha_Vencimiento ASC;
+```
+
+### Payment History for a Specific Invoice
+
+```sql
+-- All payments applied to a given invoice
+SELECT
+    p.Id_Pago,
+    p.Fecha_Pago,
+    mp.Nombre AS Metodo_Pago,
+    p.Monto_Pagado,
+    p.Numero_Referencia,
+    p.Estado
+FROM Pago p
+INNER JOIN Metodo_Pago mp ON p.Id_Metodo_Pago = mp.Id_Metodo_Pago
+WHERE p.Id_Factura = @Id_Factura
+  AND p.Estado = 1
+ORDER BY p.Fecha_Pago ASC;
+```
+
+<Tip>
+  To verify that an invoice is fully paid, compare the `SUM(Monto_Pagado)` of all active `Pago` rows against `Factura.Monto_Total`. A discrepancy indicates a partial payment — update `Saldo_Pendiente` and set the appropriate `Estado_Factura` accordingly.
+</Tip>
+
+---
+
+## Foreign-Key Relationships
+
+```
+Venta ──────────────────────┐
+                             ├── Factura ──── Pago ──── Metodo_Pago
+Estado_Factura ─────────────┤
+                             │
+Usuario ────────────────────┘
+```
+
+- `Factura.Id_Venta` → `Venta.Id_Venta`
+- `Factura.Id_Usuario` → `Usuario.Id_Usuario`
+- `Factura.Id_Estado_Factura` → `Estado_Factura.Id_Estado_Factura`
+- `Pago.Id_Factura` → `Factura.Id_Factura`
+- `Pago.Id_Metodo_Pago` → `Metodo_Pago.Id_Metodo_Pago`

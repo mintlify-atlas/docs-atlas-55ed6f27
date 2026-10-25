@@ -1,0 +1,81 @@
+---
+title: "Mundo Escolar Database Schema: 24-Table Overview"
+sidebarTitle: "Overview"
+description: "High-level map of all 24 tables in the Mundo Escolar database, organized by domain with key relationships and foreign-key constraints."
+---
+
+The **MUNDO\_ESCOLAR** database contains 24 tables organized into 5 functional domains: Security, Clients, Inventory, Purchases, and Sales & Billing. The schema was designed following a normalized Entity-Relationship Model (MER) for a school bookstore and stationery shop, ensuring referential integrity across all domains through explicit foreign-key constraints and unique indexes.
+
+## Table Summary
+
+| Table | Domain | Primary Key |
+|---|---|---|
+| `Rol` | Security | `Id_Rol` |
+| `Permiso` | Security | `Id_Permiso` |
+| `Rol_Permiso` | Security | `Id_Rol_Permiso` |
+| `Usuario` | Security | `Id_Usuario` |
+| `Rol_Usuario` | Security | `Id_Rol_Usuario` |
+| `Bitacora` | Security | `Id_Bitacora` |
+| `Tipo_Cliente` | Clients | `Id_Tipo_Cliente` |
+| `Condicion_Pago` | Clients | `Id_Condicion_Pago` |
+| `Cliente` | Clients | `Id_Cliente` |
+| `Categoria` | Inventory | `Id_Categoria` |
+| `Producto` | Inventory | `Id_Producto` |
+| `Tipo_Movimiento` | Inventory | `Id_Tipo_Movimiento` |
+| `Movimiento_Inventario` | Inventory | `Id_Movimiento_Inventario` |
+| `Proveedor` | Purchases | `Id_Proveedor` |
+| `Compra` | Purchases | `Id_Compra` |
+| `Compra_Producto` | Purchases | `Id_Compra_Producto` |
+| `Servicio` | Sales & Billing | `Id_Servicio` |
+| `Venta` | Sales & Billing | `Id_Venta` |
+| `Venta_Producto` | Sales & Billing | `Id_Venta_Producto` |
+| `Venta_Servicio` | Sales & Billing | `Id_Venta_Servicio` |
+| `Estado_Factura` | Sales & Billing | `Id_Estado_Factura` |
+| `Factura` | Sales & Billing | `Id_Factura` |
+| `Metodo_Pago` | Sales & Billing | `Id_Metodo_Pago` |
+| `Pago` | Sales & Billing | `Id_Pago` |
+
+## Design Decisions
+
+The MUNDO\_ESCOLAR schema applies a consistent set of conventions across all 24 tables:
+
+- **`BOOL` alias type** — A custom type alias defined as `CREATE TYPE BOOL FROM BIT`. Used for all boolean status flags (e.g., `Estado`) throughout the schema, providing semantic clarity that matches the original MER diagram.
+- **`IDENTITY(1,1)` primary keys** — Every table uses a surrogate integer primary key with auto-increment seeded at 1 and incrementing by 1. No natural keys are used as primary keys.
+- **`VARCHAR` with explicit lengths** — All character columns declare an explicit maximum length (e.g., `VARCHAR(50)`, `VARCHAR(100)`, `VARCHAR(255)`) to enforce data boundaries at the database engine level.
+- **`DECIMAL(12,2)` for monetary values** — All currency columns (`Precio_Venta`, `Monto_Total`, `Saldo_Pendiente`, `Costo_Unitario`, `Subtotal`, etc.) use `DECIMAL(12,2)`, supporting values up to 999,999,999,999.99 with two decimal places of precision.
+- **`DATETIME` for timestamps** — All date/time columns use the `DATETIME` type, including `Fecha_Registro`, `Fecha_Compra`, `Fecha_Emision`, `Fecha_Vencimiento`, and `Fecha_Hora` in the audit log.
+
+## Constraints
+
+The following unique constraints are defined in the schema to enforce business-rule uniqueness beyond the primary key:
+
+| Constraint Name | Table | Column | Purpose |
+|---|---|---|---|
+| `UQ_Rol_Nombre` | `Rol` | `Nombre` | No two roles may share the same name |
+| `UQ_Permiso_Nombre` | `Permiso` | `Nombre` | No two permissions may share the same name |
+| `UQ_Usuario_Correo` | `Usuario` | `Correo` | Each user must have a unique email address |
+| `UQ_Cliente_Identificacion` | `Cliente` | `Identificacion` | Each customer identification (national ID / tax number) must be unique |
+| `UQ_Proveedor_Cedula_Juridica` | `Proveedor` | `Cedula_Juridica` | Each supplier must have a unique legal ID number |
+
+## Explore by Domain
+
+<CardGroup cols={2}>
+  <Card title="Security" icon="shield-halved" href="/data-model/security">
+    Roles, permissions, users, and the audit log (Bitacora).
+  </Card>
+  <Card title="Clients" icon="users" href="/data-model/clients">
+    Customer types, payment conditions, and client records.
+  </Card>
+  <Card title="Inventory" icon="boxes-stacked" href="/data-model/inventory">
+    Product categories, products, movement types, and stock logs.
+  </Card>
+  <Card title="Purchases" icon="truck" href="/data-model/purchases">
+    Suppliers, purchase order headers, and itemized detail lines.
+  </Card>
+  <Card title="Sales" icon="cart-shopping" href="/data-model/sales">
+    Sale headers, product line items, service line items, and the service catalog.
+  </Card>
+  <Card title="Billing" icon="file-invoice-dollar" href="/data-model/billing">
+    Invoices, payment entries, invoice statuses, and payment methods.
+  </Card>
+</CardGroup>

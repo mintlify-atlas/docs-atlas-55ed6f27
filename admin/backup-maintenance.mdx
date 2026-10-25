@@ -1,0 +1,195 @@
+---
+title: "Backup and Maintenance for the Mundo Escolar Database"
+sidebarTitle: "Backup & Maintenance"
+description: "How to configure full, differential, and transaction log backups for Mundo Escolar on SQL Server 2022, and recommended database maintenance tasks."
+---
+
+`Mantenimiento_Backups.sql` is the designated file for backup and maintenance scripts in MUNDO_ESCOLAR. The file is currently a stub containing only the `USE MUNDO_ESCOLAR` context switch and is ready for implementation. This page covers the recommended backup strategy, the T-SQL commands to implement each tier, a restore walkthrough, and the index and statistics maintenance tasks that should be scheduled alongside backups.
+
+<Warning>
+MUNDO_ESCOLAR should operate under the `FULL` recovery model (implied by the use of transaction log backups) so that point-in-time recovery is possible. If transaction log backups are not taken on schedule, the log file (`MUNDO_ESCOLAR_log.ldf`) will grow continuously until it fills the 5 GB `MAXSIZE` defined in `Estructura.sql`, causing all writes to fail. Confirm the recovery model with `SELECT recovery_model_desc FROM sys.databases WHERE name = 'MUNDO_ESCOLAR'` and set it with `ALTER DATABASE MUNDO_ESCOLAR SET RECOVERY FULL` if needed.
+</Warning>
+
+---
+
+## Backup Strategy
+
+A three-tier backup schedule provides the best balance between recovery speed and storage cost for a transactional school bookstore database.
+
+<CardGroup cols={3}>
+  <Card title="Full Backup" icon="database">
+    **Frequency:** Weekly (e.g. every Sunday at 01:00)
+
+    Captures the entire database — data and log — in a single backup set. This is the baseline for any restore chain. Full backups are the largest files but the simplest to restore from.
+  </Card>
+  <Card title="Differential Backup" icon="clock-rotate-left">
+    **Frequency:** Daily (e.g. every night at 23:00)
+
+    Captures all pages that have changed since the last full backup. Restoring requires only the most recent full backup plus the most recent differential — far faster than replaying many log backups.
+  </Card>
+  <Card title="Transaction Log Backup" icon="list-check">
+    **Frequency:** Hourly
+
+    Captures committed transactions since the last log backup. Enables point-in-time recovery to any minute within the retention window. Truncates the active log to prevent unbounded growth.
+  </Card>
+</CardGroup>
+
+---
+
+## Backup Commands
+
+Add the following scripts to `sql/Mantenimiento_Backups.sql`. Adjust the file paths to match the backup directory on your server.
+
+### Full Backup
+
+```sql
+-- Full backup
+BACKUP DATABASE MUNDO_ESCOLAR
+TO DISK = 'C:\SQLBackup\MUNDO_ESCOLAR_full.bak'
+WITH INIT, COMPRESSION, STATS = 10;
+GO
+```
+
+### Differential Backup
+
+```sql
+-- Differential backup
+BACKUP DATABASE MUNDO_ESCOLAR
+TO DISK = 'C:\SQLBackup\MUNDO_ESCOLAR_diff.bak'
+WITH DIFFERENTIAL, INIT, COMPRESSION, STATS = 10;
+GO
+```
+
+### Transaction Log Backup
+
+```sql
+-- Transaction log backup
+BACKUP LOG MUNDO_ESCOLAR
+TO DISK = 'C:\SQLBackup\MUNDO_ESCOLAR_log.bak'
+WITH INIT, COMPRESSION, STATS = 10;
+GO
+```
+
+<Note>
+`WITH COMPRESSION` reduces backup file size by 60–80% on typical OLTP workloads with minimal CPU overhead on SQL Server 2022. `STATS = 10` prints progress every 10% — useful for monitoring long-running full backups. `WITH INIT` overwrites any existing backup set in the file; use `WITH NOINIT` to append to an existing multi-backup file instead.
+</Note>
+
+---
+
+## Restore Example
+
+Use the following sequence when restoring MUNDO_ESCOLAR from a full backup followed by the latest transaction log. The `WITH NORECOVERY` option keeps the database in a restoring state so additional backups can be applied before bringing it online.
+
+```sql
+-- Restore from full backup (with norecovery for log replay)
+RESTORE DATABASE MUNDO_ESCOLAR
+FROM DISK = 'C:\SQLBackup\MUNDO_ESCOLAR_full.bak'
+WITH NORECOVERY, REPLACE, STATS = 10;
+GO
+
+-- Apply transaction log
+RESTORE LOG MUNDO_ESCOLAR
+FROM DISK = 'C:\SQLBackup\MUNDO_ESCOLAR_log.bak'
+WITH RECOVERY;
+GO
+```
+
+For a full recovery chain that includes a differential backup, apply it between the full and log steps:
+
+```sql
+-- Step 1: Restore full backup
+RESTORE DATABASE MUNDO_ESCOLAR
+FROM DISK = 'C:\SQLBackup\MUNDO_ESCOLAR_full.bak'
+WITH NORECOVERY, REPLACE, STATS = 10;
+GO
+
+-- Step 2: Apply most recent differential backup
+RESTORE DATABASE MUNDO_ESCOLAR
+FROM DISK = 'C:\SQLBackup\MUNDO_ESCOLAR_diff.bak'
+WITH NORECOVERY, STATS = 10;
+GO
+
+-- Step 3: Apply transaction log(s) — repeat for each log file in sequence
+RESTORE LOG MUNDO_ESCOLAR
+FROM DISK = 'C:\SQLBackup\MUNDO_ESCOLAR_log.bak'
+WITH RECOVERY;
+GO
+```
+
+To restore to a specific point in time (e.g. just before an accidental bulk delete), add `STOPAT` to the final log restore:
+
+```sql
+RESTORE LOG MUNDO_ESCOLAR
+FROM DISK = 'C:\SQLBackup\MUNDO_ESCOLAR_log.bak'
+WITH RECOVERY, STOPAT = '2025-09-01T14:30:00';
+GO
+```
+
+---
+
+## Maintenance Tasks
+
+Regular index and statistics maintenance keeps query plans accurate and prevents fragmentation from degrading read performance on frequently-updated tables like `Venta`, `Venta_Producto`, and `Movimiento_Inventario`.
+
+### Index Rebuild
+
+Rebuilds all indexes on all user tables. Schedule weekly, ideally in the same maintenance window as the full backup.
+
+```sql
+-- Rebuild all indexes
+EXEC sp_MSforeachtable 'ALTER INDEX ALL ON ? REBUILD';
+GO
+```
+
+### Statistics Update
+
+Forces SQL Server to refresh column statistics used by the query optimizer. Schedule nightly after the differential backup.
+
+```sql
+-- Update statistics
+EXEC sp_updatestats;
+GO
+```
+
+### Database Integrity Check
+
+Runs `DBCC CHECKDB` to detect corruption in data pages, index pages, and system tables. Schedule weekly. The `WITH NO_INFOMSGS` option suppresses informational messages so only warnings and errors are returned.
+
+```sql
+-- Check database integrity
+DBCC CHECKDB ('MUNDO_ESCOLAR') WITH NO_INFOMSGS;
+GO
+```
+
+### Shrink Log (Emergency Only)
+
+If the log file grows unexpectedly large because log backups were missed, use `DBCC SHRINKFILE` after taking a log backup to reclaim space. **Do not schedule this as a routine task** — routine log shrinking causes severe index fragmentation.
+
+```sql
+-- Emergency log shrink (run only after a successful log backup)
+USE MUNDO_ESCOLAR;
+GO
+DBCC SHRINKFILE (MUNDO_ESCOLAR_log, 512);
+GO
+```
+
+---
+
+## SQL Server Agent Jobs
+
+All backup and maintenance commands above should be scheduled as SQL Server Agent jobs so they run automatically without manual intervention. Create the following jobs and add the corresponding T-SQL from `Mantenimiento_Backups.sql` to each job step.
+
+| Job Name | Schedule | Script |
+|---|---|---|
+| `MUNDO_ESCOLAR - Full Backup` | Weekly — Sunday 01:00 | `BACKUP DATABASE … WITH INIT, COMPRESSION` |
+| `MUNDO_ESCOLAR - Differential Backup` | Daily — 23:00 (Mon–Sat) | `BACKUP DATABASE … WITH DIFFERENTIAL` |
+| `MUNDO_ESCOLAR - Log Backup` | Hourly — :00 every hour | `BACKUP LOG … WITH INIT, COMPRESSION` |
+| `MUNDO_ESCOLAR - Index Rebuild` | Weekly — Sunday 02:00 (after full backup) | `EXEC sp_MSforeachtable 'ALTER INDEX ALL ON ? REBUILD'` |
+| `MUNDO_ESCOLAR - Update Stats` | Daily — 00:30 (after diff backup) | `EXEC sp_updatestats` |
+| `MUNDO_ESCOLAR - Integrity Check` | Weekly — Saturday 03:00 | `DBCC CHECKDB ('MUNDO_ESCOLAR')` |
+
+Configure each job to send an **operator alert by email** on failure so the DBA is notified immediately if a backup or integrity check does not complete successfully.
+
+<Tip>
+Verify backups at least once a month by performing a full test restore to a separate named instance (e.g. `MUNDO_ESCOLAR_TEST`) on the same or a different server. Run a quick sanity check — count rows in `Venta`, `Producto`, and `Factura` — to confirm data integrity before declaring the backup valid. An untested backup is not a backup.
+</Tip>
